@@ -180,7 +180,7 @@ Error: No port specified, no .nrepl-port file found, and BREPL_PORT not set
 
 ## License
 
-MIT License
+MPL-2.0 License
 
 ## Contributing
 

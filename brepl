@@ -12,14 +12,26 @@
 (def cli-spec
   {:e {:desc "Expression to evaluate"}
    :f {:desc "File to load"}
-   :h {:desc "Host (default: localhost)" :default "localhost"}
-   :p {:desc "Port (auto-detect from .nrepl-port if not specified)"}})
+   :h {:desc "Host (default: localhost or BREPL_HOST)" :default "localhost"}
+   :p {:desc "Port (auto-detect from .nrepl-port or BREPL_PORT if not specified)"}})
 
 (defn read-nrepl-port []
   (when (.exists (io/file ".nrepl-port"))
     (-> (slurp ".nrepl-port")
         str/trim
         Integer/parseInt)))
+
+(defn get-env-var [var-name]
+  (System/getenv var-name))
+
+(defn resolve-host [cli-host]
+  (or cli-host (get-env-var "BREPL_HOST") "localhost"))
+
+(defn resolve-port [cli-port]
+  (or cli-port 
+      (read-nrepl-port)
+      (when-let [env-port (get-env-var "BREPL_PORT")]
+        (Integer/parseInt env-port))))
 
 (defn validate-args [opts]
   (let [has-expr (contains? opts :e)
@@ -59,13 +71,13 @@
 
 (defn -main [& args]
   (let [opts (cli/parse-opts args {:spec cli-spec})
-        port (or (:p opts) (read-nrepl-port))
-        host (:h opts)]
+        host (resolve-host (:h opts))
+        port (resolve-port (:p opts))]
     
     (validate-args opts)
     
     (when-not port
-      (println "Error: No port specified and no .nrepl-port file found")
+      (println "Error: No port specified, no .nrepl-port file found, and BREPL_PORT not set")
       (System/exit 1))
     
     (cond

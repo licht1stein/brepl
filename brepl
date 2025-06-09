@@ -1,0 +1,76 @@
+#!/usr/bin/env bb
+
+(babashka.deps/add-deps '{:deps {babashka/nrepl-client 
+                                 {:git/url "https://github.com/babashka/nrepl-client"
+                                  :git/sha "19fbef2525e47d80b9278c49a545de58f48ee7cf"}}})
+
+(require '[babashka.cli :as cli]
+         '[clojure.java.io :as io]
+         '[clojure.string :as str]
+         '[babashka.nrepl-client :as nrepl])
+
+(def cli-spec
+  {:e {:desc "Expression to evaluate"}
+   :f {:desc "File to load"}
+   :h {:desc "Host (default: localhost)" :default "localhost"}
+   :p {:desc "Port (auto-detect from .nrepl-port if not specified)"}})
+
+(defn read-nrepl-port []
+  (when (.exists (io/file ".nrepl-port"))
+    (-> (slurp ".nrepl-port")
+        str/trim
+        Integer/parseInt)))
+
+(defn validate-args [opts]
+  (let [has-expr (contains? opts :e)
+        has-file (contains? opts :f)]
+    (cond
+      (and has-expr has-file)
+      (do (println "Error: Cannot specify both -e and -f")
+          (System/exit 1))
+      
+      (not (or has-expr has-file))
+      (do (println "Error: Must specify either -e EXPR or -f FILE")
+          (System/exit 1))
+      
+      (and has-file (not (.exists (io/file (:f opts)))))
+      (do (println "Error: File does not exist:" (:f opts))
+          (System/exit 1)))))
+
+(defn eval-expression [host port code]
+  (try
+    (let [result (nrepl/eval-expr {:host host :port port :expr code})]
+      (doseq [val (:vals result)]
+        (println val)))
+    (catch Exception e
+      (println "Error connecting to nREPL server at" (str host ":" port))
+      (println (.getMessage e))
+      (System/exit 1))))
+
+(defn load-file [host port file-path]
+  (try
+    (let [result (nrepl/eval-expr {:host host :port port :expr (str "(load-file \"" file-path "\")")})]
+      (doseq [val (:vals result)]
+        (when val (println val))))
+    (catch Exception e
+      (println "Error connecting to nREPL server at" (str host ":" port))
+      (println (.getMessage e))
+      (System/exit 1))))
+
+(defn -main [& args]
+  (let [opts (cli/parse-opts args {:spec cli-spec})
+        port (or (:p opts) (read-nrepl-port))
+        host (:h opts)]
+    
+    (validate-args opts)
+    
+    (when-not port
+      (println "Error: No port specified and no .nrepl-port file found")
+      (System/exit 1))
+    
+    (cond
+      (:e opts) (eval-expression host port (:e opts))
+      (:f opts) (load-file host port (:f opts)))))
+
+(when (= *file* (System/getProperty "babashka.file"))
+  (apply -main *command-line-args*))

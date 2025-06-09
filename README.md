@@ -7,15 +7,16 @@ A fast, lightweight Babashka nREPL client for one-shot code evaluation and file 
 1. **Start a Babashka nREPL server** in your project:
    ```bash
    bb nrepl-server
+   # Starts on default port 1667
    ```
 
 2. **Use brepl** to evaluate expressions:
    ```bash
-   brepl -e "(+ 1 2 3)"
+   brepl -p 1667 -e "(+ 1 2 3)"
    # => 6
    ```
 
-That's it! The port is auto-detected from the `.nrepl-port` file.
+You need to specify the port with `-p 1667` since Babashka doesn't create a `.nrepl-port` file by default.
 
 ## Features
 

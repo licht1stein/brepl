@@ -2,6 +2,21 @@
 
 A fast, lightweight Babashka nREPL client for one-shot code evaluation and file loading.
 
+## Quick Start
+
+1. **Start a Babashka nREPL server** in your project:
+   ```bash
+   bb nrepl-server
+   ```
+
+2. **Use brepl** to evaluate expressions:
+   ```bash
+   brepl -e "(+ 1 2 3)"
+   # => 6
+   ```
+
+That's it! The port is auto-detected from the `.nrepl-port` file.
+
 ## Features
 
 - 🚀 **Fast startup** - Built with Babashka for instant execution
@@ -36,61 +51,54 @@ bbin install io.github.licht1stein/brepl
 
 ## Usage
 
+**Get help:** `brepl --help`
+
 ### Basic Usage
 
 ```bash
-# Evaluate an expression
+# Evaluate an expression (auto-detects port from .nrepl-port)
 brepl -e "(+ 1 2 3)"
 
 # Load and execute a file
 brepl -f script.clj
 ```
 
-### With Specific Host and Port
+### Port Configuration
+
+The **port is required** and resolved in this order:
+
+1. **Command line:** `-p 7888`
+2. **Auto-detect:** `.nrepl-port` file in current directory
+3. **Environment:** `BREPL_PORT=7888`
 
 ```bash
-# Connect to specific port
-brepl -e "(println \"Hello\")" -p 7888
+# Explicit port
+brepl -p 7888 -e "(+ 1 2)"
 
-# Connect to remote host
-brepl -e "(+ 1 2)" -h remote-server -p 7888
+# Using environment variable
+BREPL_PORT=7888 brepl -e "(+ 1 2)"
+
+# Auto-detect from .nrepl-port (most common)
+brepl -e "(+ 1 2)"
 ```
 
-### Command Line Options
-
-- `-e EXPR` - Evaluate Clojure expression
-- `-f FILE` - Load and execute Clojure file
-- `-h HOST` - nREPL host (default: localhost)
-- `-p PORT` - nREPL port (auto-detected if not specified)
-
-**Note:** You must specify either `-e` or `-f`, but not both.
-
-## Configuration
-
-### Port Discovery
-
-brepl automatically discovers nREPL ports in the following order:
-
-1. **CLI argument** - `-p PORT`
-2. **`.nrepl-port` file** - Reads port from file in current directory
-3. **Environment variable** - `BREPL_PORT`
-4. **Error** - Exit if no port found
-
-### Host Resolution
-
-brepl resolves hosts in the following order:
-
-1. **CLI argument** - `-h HOST`
-2. **Environment variable** - `BREPL_HOST`
-3. **Default** - `localhost`
-
-### Environment Variables
-
-Set these environment variables for default configuration:
+### Remote Connections
 
 ```bash
-export BREPL_HOST=localhost
-export BREPL_PORT=1667
+# Connect to remote host with specific port
+brepl -h remote-server -p 7888 -e "(+ 1 2)"
+
+# Using environment variables
+BREPL_HOST=remote-server BREPL_PORT=7888 brepl -e "(+ 1 2)"
+```
+
+## Environment Variables
+
+Set these for default configuration:
+
+```bash
+export BREPL_HOST=localhost  # Default host
+export BREPL_PORT=7888       # Default port
 ```
 
 Or use them for one-off commands:
@@ -100,26 +108,19 @@ BREPL_PORT=7888 brepl -e "(+ 1 2 3)"
 
 ## Examples
 
-### Starting a Babashka nREPL Server
-
-First, start a Babashka nREPL server in your project:
-
 ```bash
-# Start server (creates .nrepl-port file)
+# Start nREPL server (creates .nrepl-port file)
 bb nrepl-server
 
-# Or with specific port
-bb nrepl-server 7888
-```
-
-### Using brepl
-
-```bash
-# Auto-detect port from .nrepl-port file
+# Basic evaluation
+brepl -e "(+ 1 2 3)"
 brepl -e "(require '[clojure.string :as str]) (str/upper-case \"hello\")"
 
-# Load a script file
+# Load a script file  
 brepl -f my-script.clj
+
+# Multi-line expressions (use quotes)
+brepl -e "(let [x 10 y 20] (+ x y))"
 
 # Quick math
 brepl -e "(reduce + (range 100))"
@@ -127,51 +128,23 @@ brepl -e "(reduce + (range 100))"
 # Check Babashka version
 brepl -e "(System/getProperty \"babashka.version\")"
 
-# Multi-line expressions (use quotes)
-brepl -e "(let [x 10
-               y 20]
-           (+ x y))"
-```
-
-### Integration with Development Workflow
-
-```bash
-# Check if tests pass
+# Development workflow
 brepl -f test/my_test.clj
-
-# Quick REPL-style development
 brepl -e "(require '[my.namespace :refer :all]) (my-function 123)"
-
-# Evaluate with environment variables
-BREPL_PORT=7888 brepl -e "(println \"Using port 7888\")"
 ```
 
-## Error Handling
+## Troubleshooting
 
-brepl provides clear error messages for common issues:
+**Error: No port specified, no .nrepl-port file found, and BREPL_PORT not set**
+- Start an nREPL server first: `bb nrepl-server`
+- Or specify port manually: `brepl -p 7888 -e "(+ 1 2)"`
 
-```bash
-# Missing required argument
-$ brepl
-Error: Must specify either -e EXPR or -f FILE
+**Error connecting to nREPL server**
+- Check if nREPL server is running
+- Verify the port number is correct
+- For remote connections, ensure host is reachable
 
-# Both arguments provided
-$ brepl -e "(+ 1 2)" -f script.clj
-Error: Cannot specify both -e and -f
-
-# File not found
-$ brepl -f nonexistent.clj
-Error: File does not exist: nonexistent.clj
-
-# Connection issues
-$ brepl -e "(+ 1 2)" -p 9999
-Error connecting to nREPL server at localhost:9999
-Connection refused
-
-# No port configuration
-$ brepl -e "(+ 1 2)"
-Error: No port specified, no .nrepl-port file found, and BREPL_PORT not set
-```
+**Get help anytime:** `brepl --help`
 
 ## Requirements
 

@@ -10,10 +10,41 @@
          '[babashka.nrepl-client :as nrepl])
 
 (def cli-spec
-  {:e {:desc "Expression to evaluate"}
-   :f {:desc "File to load"}
-   :h {:desc "Host (default: localhost or BREPL_HOST)" :default "localhost"}
-   :p {:desc "Port (auto-detect from .nrepl-port or BREPL_PORT if not specified)"}})
+  {:e {:desc "Expression to evaluate"
+       :ref "<expr>"}
+   :f {:desc "File to load and execute"
+       :ref "<file>"}
+   :h {:desc "nREPL host"
+       :ref "<host>"
+       :default "localhost"
+       :default-desc "localhost or BREPL_HOST"}
+   :p {:desc "nREPL port (required - auto-detects from .nrepl-port or BREPL_PORT)"
+       :ref "<port>"}
+   :help {:desc "Show this help message"
+          :alias :?}})
+
+(defn print-help []
+  (println "brepl - Fast Babashka nREPL client for one-shot code evaluation")
+  (println)
+  (println "USAGE:")
+  (println "    brepl [OPTIONS] -e <expr>")
+  (println "    brepl [OPTIONS] -f <file>")
+  (println)
+  (println "OPTIONS:")
+  (println (cli/format-opts {:spec cli-spec :order [:e :f :h :p :help]}))
+  (println)
+  (println "PORT RESOLUTION:")
+  (println "    Port is resolved in the following order:")
+  (println "    1. -p <port> command line argument")
+  (println "    2. .nrepl-port file in current directory")
+  (println "    3. BREPL_PORT environment variable")
+  (println "    4. Error if none found")
+  (println)
+  (println "EXAMPLES:")
+  (println "    brepl -e \"(+ 1 2 3)\"")
+  (println "    brepl -f script.clj")
+  (println "    brepl -p 7888 -e \"(println \\\"Hello\\\")\"")
+  (println "    BREPL_PORT=7888 brepl -e \"(+ 1 2)\""))
 
 (defn read-nrepl-port []
   (when (.exists (io/file ".nrepl-port"))
@@ -34,15 +65,23 @@
         (Integer/parseInt env-port))))
 
 (defn validate-args [opts]
+  (when (:help opts)
+    (print-help)
+    (System/exit 0))
+  
   (let [has-expr (contains? opts :e)
         has-file (contains? opts :f)]
     (cond
       (and has-expr has-file)
       (do (println "Error: Cannot specify both -e and -f")
+          (println)
+          (print-help)
           (System/exit 1))
       
       (not (or has-expr has-file))
       (do (println "Error: Must specify either -e EXPR or -f FILE")
+          (println)
+          (print-help)
           (System/exit 1))
       
       (and has-file (not (.exists (io/file (:f opts)))))

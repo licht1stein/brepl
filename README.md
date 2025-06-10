@@ -63,7 +63,7 @@ let
     owner = "licht1stein";
     repo = "brepl";
     rev = "v1.0.0";
-    hash = "sha256-mRBOfQ5zxCHSYPeFxo2dDl7CydIJYupZvhQNqv53oLk=";
+    hash = "sha256-xJGShKrSw6LvzTAAGpYBrhjmANEwAYvFXlhfAcy6aD8=
   } + "/package.nix") {};
 in
 pkgs.mkShell {
@@ -72,28 +72,6 @@ pkgs.mkShell {
 ```
 
 Then run `nix-shell` to enter a shell with brepl available.
-
-Alternative approaches if you encounter hash issues:
-
-```nix
-# Using sha256 attribute (older Nix versions)
-breplSrc = pkgs.fetchFromGitHub {
-  owner = "licht1stein";
-  repo = "brepl";
-  rev = "v1.0.0";
-  sha256 = "1fd0fzzal38lprcylqh9sb4w4phfkn6wd1gpc3923i3k1rylw44r";
-};
-
-# Or fetch tarball directly
-breplSrc = pkgs.fetchTarball {
-  url = "https://github.com/licht1stein/brepl/archive/v1.0.0.tar.gz";
-  sha256 = "1fd0fzzal38lprcylqh9sb4w4phfkn6wd1gpc3923i3k1rylw44r";
-};
-```
-
-If you get a hash mismatch error, use the hash from the error message.
-
-See [nix-example.md](nix-example.md) for more installation options.
 
 ### Option 4: Manual Installation
 
@@ -336,7 +314,7 @@ MPL-2.0 License
 
 ## Versioning
 
-brepl follows [break versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md):
+brepl follows [break versioning](https://www.taoensso.com/break-versioning):
 - Version format: `<major>.<minor>.<non-breaking>`
 - Breaking changes increment the minor version (e.g., 1.0.0 → 1.1.0)
 - Non-breaking changes increment the patch version (e.g., 1.0.0 → 1.0.1)

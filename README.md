@@ -1,6 +1,8 @@
 # brepl
 
-A fast, lightweight Babashka nREPL client for one-shot code evaluation and file loading.
+[![Run Tests](https://github.com/licht1stein/brepl/actions/workflows/test.yml/badge.svg)](https://github.com/licht1stein/brepl/actions/workflows/test.yml)
+
+A fast, lightweight nREPL client for one-shot interactions with any nREPL server.
 
 ## Quick Start
 
@@ -12,7 +14,7 @@ A fast, lightweight Babashka nREPL client for one-shot code evaluation and file 
 
 2. **Use brepl** to evaluate expressions:
    ```bash
-   brepl -p 1667 -e "(+ 1 2 3)"
+   brepl -p 1667 -e '(+ 1 2 3)'
    # => 6
    ```
 
@@ -21,13 +23,14 @@ You need to specify the port with `-p 1667` since Babashka doesn't create a `.nr
 ## Features
 
 - 🚀 **Fast startup** - Built with Babashka for instant execution
+- 💬 **Full nREPL protocol** - Access any nREPL operation, not just evaluation
 - 📝 **Expression evaluation** - Evaluate Clojure expressions directly from command line
 - 📁 **File loading** - Load and execute entire Clojure files
 - 🔍 **Auto-discovery** - Automatically detects `.nrepl-port` files
 - ⚙️ **Flexible configuration** - Support for environment variables and CLI arguments
 - 🐛 **Proper error handling** - Shows exceptions and stack traces
 - 📊 **Verbose mode** - Debug nREPL communication with `--verbose`
-- 💬 **Raw messages** - Send any nREPL operation with `-m`
+- 🎯 **One-shot design** - Perfect for scripts, editor integration, and automation
 - 🛠️ **Easy installation** - Install via bbin or manual setup
 - ✅ **Well tested** - Comprehensive test suite included
 
@@ -39,7 +42,15 @@ You need to specify the port with `-p 1667` since Babashka doesn't create a `.nr
 bbin install io.github.licht1stein/brepl
 ```
 
-### Option 2: Manual Installation
+### Option 2: Download with curl
+
+```bash
+curl -sSL https://raw.githubusercontent.com/licht1stein/brepl/master/brepl -o brepl
+chmod +x brepl
+# Move to a directory on your PATH
+```
+
+### Option 3: Manual Installation
 
 1. Clone or download the repository
 2. Make the script executable:
@@ -74,10 +85,13 @@ bbin install io.github.licht1stein/brepl
 
 ```bash
 # Evaluate an expression (auto-detects port from .nrepl-port)
-brepl -e "(+ 1 2 3)"
+brepl -e '(+ 1 2 3)'
 
 # Load and execute a file
 brepl -f script.clj
+
+# Use single quotes to avoid escaping double quotes
+brepl -e '(println "Hello, World!")'
 ```
 
 ### Port Configuration
@@ -90,23 +104,23 @@ The **port is required** and resolved in this order:
 
 ```bash
 # Explicit port
-brepl -p 7888 -e "(+ 1 2)"
+brepl -p 7888 -e '(+ 1 2)'
 
 # Using environment variable
-BREPL_PORT=7888 brepl -e "(+ 1 2)"
+BREPL_PORT=7888 brepl -e '(+ 1 2)'
 
 # Auto-detect from .nrepl-port (most common)
-brepl -e "(+ 1 2)"
+brepl -e '(+ 1 2)'
 ```
 
 ### Remote Connections
 
 ```bash
 # Connect to remote host with specific port
-brepl -h remote-server -p 7888 -e "(+ 1 2)"
+brepl -h remote-server -p 7888 -e '(+ 1 2)'
 
 # Using environment variables
-BREPL_HOST=remote-server BREPL_PORT=7888 brepl -e "(+ 1 2)"
+BREPL_HOST=remote-server BREPL_PORT=7888 brepl -e '(+ 1 2)'
 ```
 
 ## Environment Variables
@@ -120,7 +134,7 @@ export BREPL_PORT=7888       # Default port
 
 Or use them for one-off commands:
 ```bash
-BREPL_PORT=7888 brepl -e "(+ 1 2 3)"
+BREPL_PORT=7888 brepl -e '(+ 1 2 3)'
 ```
 
 ## Examples
@@ -130,8 +144,8 @@ BREPL_PORT=7888 brepl -e "(+ 1 2 3)"
 bb nrepl-server
 
 # Basic evaluation
-brepl -e "(+ 1 2 3)"
-brepl -e "(require '[clojure.string :as str]) (str/upper-case \"hello\")"
+brepl -e '(+ 1 2 3)'
+brepl -e '(require '[clojure.string :as str]) (str/upper-case "hello")'
 
 # Load a script file  
 brepl -f my-script.clj
@@ -141,25 +155,27 @@ brepl -m '{"op" "describe"}'
 brepl -m '{"op" "ls-sessions"}'
 brepl -m '{"op" "eval" "code" "(+ 1 2)"}'
 
-# Multi-line expressions (use quotes)
-brepl -e "(let [x 10 y 20] (+ x y))"
+# Multi-line expressions (single quotes make it easier)
+brepl -e '(let [x 10 
+               y 20] 
+           (+ x y))'
 
 # Quick math
-brepl -e "(reduce + (range 100))"
+brepl -e '(reduce + (range 100))'
 
 # Check Babashka version
-brepl -e "(System/getProperty \"babashka.version\")"
+brepl -e '(System/getProperty "babashka.version")'
 
 # Development workflow
 brepl -f test/my_test.clj
-brepl -e "(require '[my.namespace :refer :all]) (my-function 123)"
+brepl -e '(require '[my.namespace :refer :all]) (my-function 123)'
 ```
 
 ## Advanced Usage
 
 ### Raw nREPL Messages
 
-The `-m/--message` option allows you to send raw nREPL messages in EDN format. This gives you access to all operations supported by the nREPL server, not just evaluation.
+The `-m/--message` option allows you to send raw nREPL messages in EDN format. This makes brepl a full-fledged nREPL client capable of accessing all operations supported by the nREPL server.
 
 ```bash
 # Get server capabilities
@@ -261,7 +277,7 @@ The test suite covers:
 Use `--verbose` to debug nREPL communication:
 
 ```bash
-brepl -p 1667 -e "(+ 1 2)" --verbose
+brepl -p 1667 -e '(+ 1 2)' --verbose
 # Shows the complete nREPL message exchange:
 # {"op" "eval", "code" "(+ 1 2)", "id" "1749559876543"}
 # {"id" "1749559876543", "ns" "user", "session" "none", "value" "3"}

@@ -47,11 +47,11 @@
   (println "    4. Error if none found")
   (println)
   (println "EXAMPLES:")
-  (println "    brepl -e \"(+ 1 2 3)\"")
+  (println "    brepl -e '(+ 1 2 3)'")
   (println "    brepl -f script.clj")
-  (println "    brepl -m '{:op \"describe\"}'")
-  (println "    brepl -p 7888 -e \"(println \\\"Hello\\\")\"")
-  (println "    BREPL_PORT=7888 brepl -e \"(+ 1 2)\""))
+  (println "    brepl -m '{\"op\" \"describe\"}'")
+  (println "    brepl -p 7888 -e '(println \"Hello\")'")
+  (println "    BREPL_PORT=7888 brepl -e '(+ 1 2)'"))
 
 (defn read-nrepl-port []
   (when (.exists (io/file ".nrepl-port"))

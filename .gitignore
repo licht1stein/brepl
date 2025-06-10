@@ -1,0 +1,37 @@
+# Temporary files
+*~
+\#*#
+.#*
+
+# nREPL port files
+.nrepl-port
+.nrepl-history
+
+# Clojure LSP
+.lsp/
+.clj-kondo/
+
+# Test artifacts
+target/
+.cpcache/
+
+# IDE specific
+.idea/
+*.iml
+.vscode/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Local development files
+*.local
+local/
+scratch/
+
+# Logs
+*.log
+
+# Backup files
+*.bak
+*.backup

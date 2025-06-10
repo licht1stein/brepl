@@ -1,13 +1,12 @@
 #!/usr/bin/env bb
 
-(babashka.deps/add-deps '{:deps {babashka/nrepl-client 
-                                 {:git/url "https://github.com/babashka/nrepl-client"
-                                  :git/sha "19fbef2525e47d80b9278c49a545de58f48ee7cf"}}})
-
 (require '[babashka.cli :as cli]
          '[clojure.java.io :as io]
          '[clojure.string :as str]
-         '[babashka.nrepl-client :as nrepl])
+         '[bencode.core :as bencode])
+
+(import '[java.net Socket]
+        '[java.io PushbackInputStream])
 
 (def cli-spec
   {:e {:desc "Expression to evaluate"
@@ -88,25 +87,95 @@
       (do (println "Error: File does not exist:" (:f opts))
           (System/exit 1)))))
 
+;; nREPL client implementation
+(defn bytes->str [x]
+  (if (bytes? x) (String. x) x))
+
+(defn send-eval-message [host port code]
+  (let [socket (Socket. host port)
+        out (.getOutputStream socket)
+        in (PushbackInputStream. (.getInputStream socket))
+        msg-id (str (System/currentTimeMillis))
+        msg {"op" "eval"
+             "code" code
+             "id" msg-id}]
+    (bencode/write-bencode out msg)
+    (.flush out)
+    
+    ;; Collect all response messages until we get "done" status
+    (loop [responses []]
+      (let [response (bencode/read-bencode in)
+            status (get response "status")
+            status-strs (when status
+                          (if (coll? status)
+                            (map #(if (bytes? %) (String. %) %) status)
+                            [(if (bytes? status) (String. status) status)]))]
+        (if (and status-strs (some #(= % "done") status-strs))
+          (do
+            (.close socket)
+            (conj responses response))
+          (recur (conj responses response)))))))
+
+(defn process-eval-responses [responses]
+  (let [combined {:out []
+                  :err []
+                  :values []
+                  :ex nil
+                  :status []}]
+    (reduce (fn [acc resp]
+              (cond-> acc
+                (get resp "out") (update :out conj (bytes->str (get resp "out")))
+                (get resp "err") (update :err conj (bytes->str (get resp "err")))
+                (get resp "value") (update :values conj (bytes->str (get resp "value")))
+                (get resp "ex") (assoc :ex (bytes->str (get resp "ex")))
+                (get resp "status") (update :status into 
+                                            (map bytes->str 
+                                                 (if (coll? (get resp "status"))
+                                                   (get resp "status")
+                                                   [(get resp "status")])))))
+            combined
+            responses)))
+
 (defn eval-expression [host port code]
   (try
-    (let [result (nrepl/eval-expr {:host host :port port :expr code})]
-      (doseq [val (:vals result)]
-        (println val)))
+    (let [responses (send-eval-message host port code)
+          processed (process-eval-responses responses)]
+      
+      ;; Print stdout output
+      (doseq [out (:out processed)]
+        (print out))
+      
+      ;; Print stderr output to stderr
+      (doseq [err (:err processed)]
+        (binding [*out* *err*]
+          (print err)))
+      
+      ;; Print evaluation results
+      (doseq [val (:values processed)]
+        (println val))
+      
+      ;; Handle exceptions
+      (when (:ex processed)
+        (binding [*out* *err*]
+          (println "Exception:" (:ex processed))))
+      
+      ;; Handle empty response
+      (when (and (empty? (:values processed))
+                 (empty? (:out processed))
+                 (empty? (:err processed))
+                 (not (:ex processed)))
+        (when (some #{"eval-error"} (flatten (:status processed)))
+          (binding [*out* *err*]
+            (println "Evaluation error occurred")))))
+    
     (catch Exception e
       (println "Error connecting to nREPL server at" (str host ":" port))
       (println (.getMessage e))
       (System/exit 1))))
 
 (defn load-file [host port file-path]
-  (try
-    (let [result (nrepl/eval-expr {:host host :port port :expr (str "(load-file \"" file-path "\")")})]
-      (doseq [val (:vals result)]
-        (when val (println val))))
-    (catch Exception e
-      (println "Error connecting to nREPL server at" (str host ":" port))
-      (println (.getMessage e))
-      (System/exit 1))))
+  (let [code (slurp file-path)]
+    (eval-expression host port code)))
 
 (defn -main [& args]
   (let [opts (cli/parse-opts args {:spec cli-spec})

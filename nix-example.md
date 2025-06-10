@@ -8,12 +8,13 @@ Add brepl to your `home.nix` configuration:
 { config, pkgs, ... }:
 
 let
-  brepl = pkgs.callPackage (pkgs.fetchFromGitHub {
+  breplSrc = pkgs.fetchFromGitHub {
     owner = "licht1stein";
     repo = "brepl";
     rev = "v1.0.0"; # or a specific commit hash
-    sha256 = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="; # nix will tell you the correct hash
-  } + "/package.nix") {};
+    hash = "sha256-mRBOfQ5zxCHSYPeFxo2dDl7CydIJYupZvhQNqv53oLk=";
+  };
+  brepl = pkgs.callPackage "${breplSrc}/package.nix" {};
 in
 {
   home.packages = [ brepl ];
@@ -44,11 +45,11 @@ Create a `flake.nix` in your project:
 
 ```bash
 # Build and install to user profile
-nix-build -E 'with import <nixpkgs> {}; callPackage (fetchFromGitHub { owner = "licht1stein"; repo = "brepl"; rev = "v1.0.0"; sha256 = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="; } + "/package.nix") {}'
+nix-build -E 'with import <nixpkgs> {}; callPackage (fetchFromGitHub { owner = "licht1stein"; repo = "brepl"; rev = "v1.0.0"; sha256 = "sha256-H9D/s6OL+cxsIei5c0TS9HRt/W0dGcOS44xHGVyU5KQ="; } + "/package.nix") {}'
 nix-env -i ./result
 
 # Or run directly without installing
-nix run -f '<nixpkgs>' --expr 'callPackage (fetchFromGitHub { owner = "licht1stein"; repo = "brepl"; rev = "v1.0.0"; sha256 = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="; } + "/package.nix") {}' -c brepl --version
+nix run -f '<nixpkgs>' --expr 'callPackage (fetchFromGitHub { owner = "licht1stein"; repo = "brepl"; rev = "v1.0.0"; sha256 = "sha256-H9D/s6OL+cxsIei5c0TS9HRt/W0dGcOS44xHGVyU5KQ="; } + "/package.nix") {}' -c brepl --version
 ```
 
 ## Getting the SHA256

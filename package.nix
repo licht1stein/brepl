@@ -1,6 +1,5 @@
 { lib
 , stdenv
-, fetchFromGitHub
 , makeWrapper
 , babashka
 }:
@@ -9,12 +8,7 @@ stdenv.mkDerivation rec {
   pname = "brepl";
   version = "1.0.0";
 
-  src = fetchFromGitHub {
-    owner = "licht1stein";
-    repo = "brepl";
-    rev = "v${version}";
-    sha256 = ""; # Use nix-prefetch-github to get this
-  };
+  src = ./.;
 
   nativeBuildInputs = [ makeWrapper ];
 

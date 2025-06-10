@@ -36,7 +36,7 @@ You need to specify the port with `-p 1667` since Babashka doesn't create a `.nr
 
 ## Installation
 
-### Option 1: Install via bbin (Recommended)
+### Option 1: Install via bbin
 
 ```bash
 bbin install io.github.licht1stein/brepl
@@ -45,12 +45,57 @@ bbin install io.github.licht1stein/brepl
 ### Option 2: Download with curl
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/licht1stein/brepl/master/brepl -o brepl
+# Download latest release (v1.0.0)
+curl -sSL https://raw.githubusercontent.com/licht1stein/brepl/v1.0.0/brepl -o brepl
 chmod +x brepl
 # Move to a directory on your PATH
 ```
 
-### Option 3: Manual Installation
+### Option 3: Install with Nix
+
+Add to your project's `shell.nix`:
+
+```nix
+{ pkgs ? import <nixpkgs> {} }:
+
+let
+  brepl = pkgs.callPackage (pkgs.fetchFromGitHub {
+    owner = "licht1stein";
+    repo = "brepl";
+    rev = "v1.0.0";
+    hash = "sha256-mRBOfQ5zxCHSYPeFxo2dDl7CydIJYupZvhQNqv53oLk=";
+  } + "/package.nix") {};
+in
+pkgs.mkShell {
+  buildInputs = [ brepl ];
+}
+```
+
+Then run `nix-shell` to enter a shell with brepl available.
+
+Alternative approaches if you encounter hash issues:
+
+```nix
+# Using sha256 attribute (older Nix versions)
+breplSrc = pkgs.fetchFromGitHub {
+  owner = "licht1stein";
+  repo = "brepl";
+  rev = "v1.0.0";
+  sha256 = "1fd0fzzal38lprcylqh9sb4w4phfkn6wd1gpc3923i3k1rylw44r";
+};
+
+# Or fetch tarball directly
+breplSrc = pkgs.fetchTarball {
+  url = "https://github.com/licht1stein/brepl/archive/v1.0.0.tar.gz";
+  sha256 = "1fd0fzzal38lprcylqh9sb4w4phfkn6wd1gpc3923i3k1rylw44r";
+};
+```
+
+If you get a hash mismatch error, use the hash from the error message.
+
+See [nix-example.md](nix-example.md) for more installation options.
+
+### Option 4: Manual Installation
 
 1. Clone or download the repository
 2. Make the script executable:

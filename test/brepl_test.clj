@@ -256,6 +256,11 @@
       (is (str/includes? (:out result) "USAGE:"))
       (is (str/includes? (:out result) "OPTIONS:"))))
   
+  (testing "Version display"
+    (let [result (run-brepl "--version")]
+      (is (= 0 (:exit result)))
+      (is (str/includes? (:out result) "brepl 1.0.0"))))
+  
   (testing "No port available"
     (let [result (run-brepl "-e" "(+ 1 1)")]
       (is (= 1 (:exit result)))

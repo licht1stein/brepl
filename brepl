@@ -1,5 +1,7 @@
 #!/usr/bin/env bb
 
+(def version "1.0.0")
+
 (require '[babashka.cli :as cli]
          '[clojure.java.io :as io]
          '[clojure.string :as str]
@@ -25,6 +27,7 @@
    :p {:desc "nREPL port (required - auto-detects from .nrepl-port or BREPL_PORT)"
        :ref "<port>"}
    :verbose {:desc "Show raw nREPL messages instead of parsed output"}
+   :version {:desc "Show brepl version"}
    :help {:desc "Show this help message"
           :alias :?}})
 
@@ -37,7 +40,7 @@
   (println "    brepl [OPTIONS] -m <message>")
   (println)
   (println "OPTIONS:")
-  (println (cli/format-opts {:spec cli-spec :order [:e :f :m :h :p :verbose :help]}))
+  (println (cli/format-opts {:spec cli-spec :order [:e :f :m :h :p :verbose :version :help]}))
   (println)
   (println "PORT RESOLUTION:")
   (println "    Port is resolved in the following order:")
@@ -74,6 +77,10 @@
 (defn validate-args [opts]
   (when (:help opts)
     (print-help)
+    (System/exit 0))
+  
+  (when (:version opts)
+    (println (str "brepl " version))
     (System/exit 0))
   
   (let [has-expr (contains? opts :e)

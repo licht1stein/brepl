@@ -78,6 +78,7 @@ chmod +x brepl
   -h, --h          <host>     nREPL host (default: localhost or BREPL_HOST)
   -p, --p          <port>     nREPL port (required - auto-detects from .nrepl-port or BREPL_PORT)
       --verbose              Show raw nREPL messages instead of parsed output
+      --version              Show brepl version
   -?, --help                 Show help message
 ```
 
@@ -287,6 +288,13 @@ brepl -p 1667 -e '(+ 1 2)' --verbose
 ## License
 
 MPL-2.0 License
+
+## Versioning
+
+brepl follows [break versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md):
+- Version format: `<major>.<minor>.<non-breaking>`
+- Breaking changes increment the minor version (e.g., 1.0.0 → 1.1.0)
+- Non-breaking changes increment the patch version (e.g., 1.0.0 → 1.0.1)
 
 ## Contributing
 

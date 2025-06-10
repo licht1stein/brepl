@@ -4,7 +4,8 @@
          '[clojure.java.io :as io]
          '[clojure.string :as str]
          '[bencode.core :as bencode]
-         '[clojure.pprint :as pp])
+         '[clojure.pprint :as pp]
+         '[clojure.walk :as walk])
 
 (import '[java.net Socket]
         '[java.io PushbackInputStream])
@@ -14,6 +15,9 @@
        :ref "<expr>"}
    :f {:desc "File to load and execute"
        :ref "<file>"}
+   :m {:desc "Raw nREPL message (EDN format)"
+       :ref "<message>"
+       :alias :message}
    :h {:desc "nREPL host"
        :ref "<host>"
        :default "localhost"
@@ -30,9 +34,10 @@
   (println "USAGE:")
   (println "    brepl [OPTIONS] -e <expr>")
   (println "    brepl [OPTIONS] -f <file>")
+  (println "    brepl [OPTIONS] -m <message>")
   (println)
   (println "OPTIONS:")
-  (println (cli/format-opts {:spec cli-spec :order [:e :f :h :p :verbose :help]}))
+  (println (cli/format-opts {:spec cli-spec :order [:e :f :m :h :p :verbose :help]}))
   (println)
   (println "PORT RESOLUTION:")
   (println "    Port is resolved in the following order:")
@@ -44,6 +49,7 @@
   (println "EXAMPLES:")
   (println "    brepl -e \"(+ 1 2 3)\"")
   (println "    brepl -f script.clj")
+  (println "    brepl -m '{:op \"describe\"}'")
   (println "    brepl -p 7888 -e \"(println \\\"Hello\\\")\"")
   (println "    BREPL_PORT=7888 brepl -e \"(+ 1 2)\""))
 
@@ -71,16 +77,18 @@
     (System/exit 0))
   
   (let [has-expr (contains? opts :e)
-        has-file (contains? opts :f)]
+        has-file (contains? opts :f)
+        has-message (contains? opts :m)
+        option-count (count (filter identity [has-expr has-file has-message]))]
     (cond
-      (and has-expr has-file)
-      (do (println "Error: Cannot specify both -e and -f")
+      (> option-count 1)
+      (do (println "Error: Cannot specify multiple options (-e, -f, -m) together")
           (println)
           (print-help)
           (System/exit 1))
       
-      (not (or has-expr has-file))
-      (do (println "Error: Must specify either -e EXPR or -f FILE")
+      (= option-count 0)
+      (do (println "Error: Must specify one of -e EXPR, -f FILE, or -m MESSAGE")
           (println)
           (print-help)
           (System/exit 1))
@@ -94,13 +102,12 @@
   (if (bytes? x) (String. x) x))
 
 (defn convert-bytes-in-map [m]
-  (into {} (map (fn [[k v]]
-                  [k (cond
-                       (bytes? v) (String. v)
-                       (and (coll? v) (every? bytes? v))
-                       (mapv #(String. %) v)
-                       :else v)])
-                m)))
+  (walk/postwalk
+    (fn [x]
+      (if (bytes? x)
+        (String. x)
+        x))
+    m))
 
 (defn send-eval-message [host port code opts]
   (let [socket (Socket. host port)
@@ -207,6 +214,71 @@
   (let [code (slurp file-path)]
     (eval-expression host port code opts)))
 
+(defn send-raw-message [host port message-str opts]
+  (try
+    (let [socket (Socket. host port)
+          out (.getOutputStream socket)
+          in (PushbackInputStream. (.getInputStream socket))
+          ;; Parse the EDN message and add an ID if not present
+          msg (read-string message-str)
+          msg-with-id (if (get msg "id")
+                        msg
+                        (assoc msg "id" (str (System/currentTimeMillis))))]
+      
+      ;; Print client message in verbose mode
+      (when (:verbose opts)
+        (pp/pprint msg-with-id))
+      
+      (bencode/write-bencode out msg-with-id)
+      (.flush out)
+      
+      ;; Collect all response messages until we get "done" status or no status
+      (loop [responses []
+             timeout-count 0]
+        (let [response (bencode/read-bencode in)
+              ;; Print each response immediately in verbose mode
+              _ (when (:verbose opts)
+                  (pp/pprint (convert-bytes-in-map response)))
+              status (get response "status")
+              status-strs (when status
+                            (if (coll? status)
+                              (map #(if (bytes? %) (String. %) %) status)
+                              [(if (bytes? status) (String. status) status)]))]
+          (cond
+            ;; If we have a done status, we're finished
+            (and status-strs (some #(= % "done") status-strs))
+            (do
+              (.close socket)
+              (if (:verbose opts)
+                responses  ; Return empty since we already printed
+                (conj responses response)))
+            
+            ;; For operations that don't return "done", stop after reasonable response count
+            (> timeout-count 10)
+            (do
+              (.close socket)
+              responses)
+            
+            ;; Otherwise keep reading
+            :else
+            (recur (if (:verbose opts)
+                     responses  ; Don't accumulate in verbose mode
+                     (conj responses response))
+                   (inc timeout-count))))))
+    
+    (catch Exception e
+      (println "Error sending message to nREPL server at" (str host ":" port))
+      (println (.getMessage e))
+      (System/exit 1))))
+
+(defn process-raw-message [host port message-str opts]
+  (let [responses (send-raw-message host port message-str opts)]
+    ;; In verbose mode, everything was already printed
+    (when-not (:verbose opts)
+      ;; Pretty print each response
+      (doseq [resp responses]
+        (pp/pprint (convert-bytes-in-map resp))))))
+
 (defn -main [& args]
   (let [opts (cli/parse-opts args {:spec cli-spec})
         host (resolve-host (:h opts))
@@ -220,7 +292,8 @@
     
     (cond
       (:e opts) (eval-expression host port (:e opts) opts)
-      (:f opts) (load-file host port (:f opts) opts))))
+      (:f opts) (load-file host port (:f opts) opts)
+      (:m opts) (process-raw-message host port (:m opts) opts))))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (apply -main *command-line-args*))

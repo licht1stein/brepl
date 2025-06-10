@@ -27,6 +27,7 @@ You need to specify the port with `-p 1667` since Babashka doesn't create a `.nr
 - ⚙️ **Flexible configuration** - Support for environment variables and CLI arguments
 - 🐛 **Proper error handling** - Shows exceptions and stack traces
 - 📊 **Verbose mode** - Debug nREPL communication with `--verbose`
+- 💬 **Raw messages** - Send any nREPL operation with `-m`
 - 🛠️ **Easy installation** - Install via bbin or manual setup
 - ✅ **Well tested** - Comprehensive test suite included
 
@@ -60,12 +61,13 @@ bbin install io.github.licht1stein/brepl
 ### Command Line Options
 
 ```
-  -e, --e       <expr>  Expression to evaluate
-  -f, --f       <file>  File to load and execute
-  -h, --h       <host>  nREPL host (default: localhost or BREPL_HOST)
-  -p, --p       <port>  nREPL port (required - auto-detects from .nrepl-port or BREPL_PORT)
-      --verbose         Show raw nREPL messages instead of parsed output
-  -?, --help            Show help message
+  -e, --e          <expr>     Expression to evaluate
+  -f, --f          <file>     File to load and execute
+  -m, --m, --message <message> Raw nREPL message (EDN format)
+  -h, --h          <host>     nREPL host (default: localhost or BREPL_HOST)
+  -p, --p          <port>     nREPL port (required - auto-detects from .nrepl-port or BREPL_PORT)
+      --verbose              Show raw nREPL messages instead of parsed output
+  -?, --help                 Show help message
 ```
 
 ### Basic Usage
@@ -134,6 +136,11 @@ brepl -e "(require '[clojure.string :as str]) (str/upper-case \"hello\")"
 # Load a script file  
 brepl -f my-script.clj
 
+# Send raw nREPL messages
+brepl -m '{"op" "describe"}'
+brepl -m '{"op" "ls-sessions"}'
+brepl -m '{"op" "eval" "code" "(+ 1 2)"}'
+
 # Multi-line expressions (use quotes)
 brepl -e "(let [x 10 y 20] (+ x y))"
 
@@ -146,6 +153,61 @@ brepl -e "(System/getProperty \"babashka.version\")"
 # Development workflow
 brepl -f test/my_test.clj
 brepl -e "(require '[my.namespace :refer :all]) (my-function 123)"
+```
+
+## Advanced Usage
+
+### Raw nREPL Messages
+
+The `-m/--message` option allows you to send raw nREPL messages in EDN format. This gives you access to all operations supported by the nREPL server, not just evaluation.
+
+```bash
+# Get server capabilities
+brepl -m '{"op" "describe"}'
+
+# List active sessions
+brepl -m '{"op" "ls-sessions"}'
+
+# Clone a session
+brepl -m '{"op" "clone"}'
+
+# Get completions
+brepl -m '{"op" "complete" "prefix" "str/" "ns" "user"}'
+
+# Look up symbol documentation
+brepl -m '{"op" "info" "symbol" "map" "ns" "clojure.core"}'
+
+# Evaluate with specific session
+brepl -m '{"op" "eval" "code" "(+ 1 2)" "session" "your-session-id"}'
+```
+
+#### Common nREPL Operations
+
+- `describe` - Returns server capabilities and supported operations
+- `eval` - Evaluate code
+- `load-file` - Load a file's contents
+- `ls-sessions` - List active sessions
+- `clone` - Create a new session
+- `close` - Close a session
+- `interrupt` - Interrupt an evaluation
+- `complete` - Get code completions
+- `info` - Get symbol information
+- `lookup` - Look up symbol documentation
+- `eldoc` - Get function signature information
+
+For a complete list of standard nREPL operations, see the [nREPL documentation](https://nrepl.org/nrepl/ops.html).
+
+#### Tips for Raw Messages
+
+1. **Automatic ID generation**: If you don't provide an `id` field, brepl will add one automatically
+2. **Response handling**: Some operations return multiple messages. Use `--verbose` to see the full conversation
+3. **Session management**: Most operations work without a session, but some require one (like `interrupt`)
+4. **Byte array conversion**: All byte arrays in responses are automatically converted to strings for readability
+5. **Debugging**: Use `--verbose` with `-m` to see exactly what's sent and received
+
+```bash
+# Debug mode - see full message exchange
+brepl -m '{"op" "describe"}' --verbose
 ```
 
 ## Troubleshooting

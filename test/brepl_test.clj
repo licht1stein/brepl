@@ -237,12 +237,17 @@
   (testing "Missing required arguments"
     (let [result (run-brepl)]
       (is (= 1 (:exit result)))
-      (is (str/includes? (:out result) "Must specify either -e EXPR or -f FILE"))))
+      (is (str/includes? (:out result) "Must specify one of -e EXPR, -f FILE, or -m MESSAGE"))))
   
-  (testing "Both -e and -f specified"
+  (testing "Multiple options specified"
     (let [result (run-brepl "-e" "(+ 1 1)" "-f" "test.clj")]
       (is (= 1 (:exit result)))
-      (is (str/includes? (:out result) "Cannot specify both -e and -f"))))
+      (is (str/includes? (:out result) "Cannot specify multiple options"))))
+  
+  (testing "Both -e and -m specified"
+    (let [result (run-brepl "-e" "(+ 1 1)" "-m" "{\"op\" \"eval\"}")]
+      (is (= 1 (:exit result)))
+      (is (str/includes? (:out result) "Cannot specify multiple options"))))
   
   (testing "Help display"
     (let [result (run-brepl "--help")]
@@ -264,6 +269,36 @@
           result (run-brepl "-p" port "-e" "(+ 1 1)")]
       (is (= 1 (:exit result)))
       (is (str/includes? (:out result) "Error connecting to nREPL server")))))
+
+;; Raw message tests
+
+(deftest raw-message-test
+  (with-nrepl-server
+    (fn [port]
+      (testing "Send raw describe message"
+        (let [result (run-brepl "-p" port "-m" "{\"op\" \"describe\"}")]
+          (is (= 0 (:exit result)))
+          (is (str/includes? (:out result) "\"ops\""))
+          (is (str/includes? (:out result) "\"eval\""))
+          (is (str/includes? (:out result) "\"status\" [\"done\"]"))))
+      
+      (testing "Send raw ls-sessions message"
+        (let [result (run-brepl "-p" port "-m" "{\"op\" \"ls-sessions\"}")]
+          (is (= 0 (:exit result)))
+          (is (str/includes? (:out result) "\"sessions\""))
+          (is (str/includes? (:out result) "\"status\" [\"done\"]"))))
+      
+      (testing "Raw message with verbose mode"
+        (let [result (run-brepl "-p" port "-m" "{\"op\" \"describe\"}" "--verbose")]
+          (is (= 0 (:exit result)))
+          ;; Should show both request and response
+          (is (str/includes? (:out result) "\"op\" \"describe\""))
+          (is (str/includes? (:out result) "\"ops\""))))
+      
+      (testing "Invalid EDN in message"
+        (let [result (run-brepl "-p" port "-m" "{invalid")]
+          (is (= 1 (:exit result)))
+          (is (str/includes? (:out result) "Error sending message")))))))
 
 ;; Edge cases tests
 

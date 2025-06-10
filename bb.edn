@@ -1,1 +1,10 @@
-{:bbin/start {:main-opts ["-f" "brepl"]}}
+{:paths ["."]
+ :tasks
+ {test {:doc "Run test suite"
+        :extra-paths ["test"]
+        :extra-deps {io.github.cognitect-labs/test-runner
+                     {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
+        :task (exec 'cognitect.test-runner.api/test)
+        :exec-args {:dirs ["test"]}
+        :org.babashka/cli {:coerce {:nses [:symbol]
+                                    :vars [:symbol]}}}}}

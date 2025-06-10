@@ -25,7 +25,10 @@ You need to specify the port with `-p 1667` since Babashka doesn't create a `.nr
 - 📁 **File loading** - Load and execute entire Clojure files
 - 🔍 **Auto-discovery** - Automatically detects `.nrepl-port` files
 - ⚙️ **Flexible configuration** - Support for environment variables and CLI arguments
+- 🐛 **Proper error handling** - Shows exceptions and stack traces
+- 📊 **Verbose mode** - Debug nREPL communication with `--verbose`
 - 🛠️ **Easy installation** - Install via bbin or manual setup
+- ✅ **Well tested** - Comprehensive test suite included
 
 ## Installation
 
@@ -53,6 +56,17 @@ bbin install io.github.licht1stein/brepl
 ## Usage
 
 **Get help:** `brepl --help`
+
+### Command Line Options
+
+```
+  -e, --e       <expr>  Expression to evaluate
+  -f, --f       <file>  File to load and execute
+  -h, --h       <host>  nREPL host (default: localhost or BREPL_HOST)
+  -p, --p       <port>  nREPL port (required - auto-detects from .nrepl-port or BREPL_PORT)
+      --verbose         Show raw nREPL messages instead of parsed output
+  -?, --help            Show help message
+```
 
 ### Basic Usage
 
@@ -152,6 +166,46 @@ brepl -e "(require '[my.namespace :refer :all]) (my-function 123)"
 - [Babashka](https://babashka.org/) installed
 - Running nREPL server (Babashka, Clojure, etc.)
 
+## Development
+
+### Running Tests
+
+The project includes a comprehensive test suite. To run tests:
+
+```bash
+# Run all tests
+bb test
+
+# Run specific test namespace
+bb test --nses brepl-test
+
+# Run specific test
+bb test --vars brepl-test/basic-evaluation-test
+```
+
+The test suite covers:
+- Basic expression evaluation
+- File loading and execution
+- Error handling and exceptions
+- Output handling (stdout/stderr)
+- Port and host resolution
+- Environment variable handling
+- Verbose mode functionality
+- CLI argument validation
+- Edge cases and error conditions
+
+### Verbose Mode
+
+Use `--verbose` to debug nREPL communication:
+
+```bash
+brepl -p 1667 -e "(+ 1 2)" --verbose
+# Shows the complete nREPL message exchange:
+# {"op" "eval", "code" "(+ 1 2)", "id" "1749559876543"}
+# {"id" "1749559876543", "ns" "user", "session" "none", "value" "3"}
+# {"id" "1749559876543", "session" "none", "status" ["done"]}
+```
+
 ## License
 
 MPL-2.0 License
@@ -159,3 +213,8 @@ MPL-2.0 License
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests.
+
+Before submitting a PR:
+1. Ensure all tests pass: `bb test`
+2. Add tests for any new functionality
+3. Update documentation as needed

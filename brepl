@@ -108,7 +108,7 @@
         in (PushbackInputStream. (.getInputStream socket))
         msg-id (str (System/currentTimeMillis))
         msg {"op" "eval"
-             "code" code
+             "code" (str code)
              "id" msg-id}]
     
     ;; Print client message in verbose mode

@@ -3,7 +3,8 @@
 (require '[babashka.cli :as cli]
          '[clojure.java.io :as io]
          '[clojure.string :as str]
-         '[bencode.core :as bencode])
+         '[bencode.core :as bencode]
+         '[clojure.pprint :as pp])
 
 (import '[java.net Socket]
         '[java.io PushbackInputStream])
@@ -19,6 +20,7 @@
        :default-desc "localhost or BREPL_HOST"}
    :p {:desc "nREPL port (required - auto-detects from .nrepl-port or BREPL_PORT)"
        :ref "<port>"}
+   :verbose {:desc "Show raw nREPL messages instead of parsed output"}
    :help {:desc "Show this help message"
           :alias :?}})
 
@@ -30,7 +32,7 @@
   (println "    brepl [OPTIONS] -f <file>")
   (println)
   (println "OPTIONS:")
-  (println (cli/format-opts {:spec cli-spec :order [:e :f :h :p :help]}))
+  (println (cli/format-opts {:spec cli-spec :order [:e :f :h :p :verbose :help]}))
   (println)
   (println "PORT RESOLUTION:")
   (println "    Port is resolved in the following order:")
@@ -91,7 +93,16 @@
 (defn bytes->str [x]
   (if (bytes? x) (String. x) x))
 
-(defn send-eval-message [host port code]
+(defn convert-bytes-in-map [m]
+  (into {} (map (fn [[k v]]
+                  [k (cond
+                       (bytes? v) (String. v)
+                       (and (coll? v) (every? bytes? v))
+                       (mapv #(String. %) v)
+                       :else v)])
+                m)))
+
+(defn send-eval-message [host port code opts]
   (let [socket (Socket. host port)
         out (.getOutputStream socket)
         in (PushbackInputStream. (.getInputStream socket))
@@ -99,12 +110,20 @@
         msg {"op" "eval"
              "code" code
              "id" msg-id}]
+    
+    ;; Print client message in verbose mode
+    (when (:verbose opts)
+      (pp/pprint msg))
+    
     (bencode/write-bencode out msg)
     (.flush out)
     
     ;; Collect all response messages until we get "done" status
     (loop [responses []]
       (let [response (bencode/read-bencode in)
+            ;; Print each response immediately in verbose mode
+            _ (when (:verbose opts)
+                (pp/pprint (convert-bytes-in-map response)))
             status (get response "status")
             status-strs (when status
                           (if (coll? status)
@@ -113,8 +132,12 @@
         (if (and status-strs (some #(= % "done") status-strs))
           (do
             (.close socket)
-            (conj responses response))
-          (recur (conj responses response)))))))
+            (if (:verbose opts)
+              responses  ; Return empty since we already printed
+              (conj responses response)))
+          (recur (if (:verbose opts)
+                   responses  ; Don't accumulate in verbose mode
+                   (conj responses response))))))))
 
 (defn process-eval-responses [responses]
   (let [combined {:out []
@@ -136,46 +159,53 @@
             combined
             responses)))
 
-(defn eval-expression [host port code]
+(defn eval-expression [host port code opts]
   (try
-    (let [responses (send-eval-message host port code)
-          processed (process-eval-responses responses)]
+    (let [responses (send-eval-message host port code opts)]
       
-      ;; Print stdout output
-      (doseq [out (:out processed)]
-        (print out))
-      
-      ;; Print stderr output to stderr
-      (doseq [err (:err processed)]
-        (binding [*out* *err*]
-          (print err)))
-      
-      ;; Print evaluation results
-      (doseq [val (:values processed)]
-        (println val))
-      
-      ;; Handle exceptions
-      (when (:ex processed)
-        (binding [*out* *err*]
-          (println "Exception:" (:ex processed))))
-      
-      ;; Handle empty response
-      (when (and (empty? (:values processed))
-                 (empty? (:out processed))
-                 (empty? (:err processed))
-                 (not (:ex processed)))
-        (when (some #{"eval-error"} (flatten (:status processed)))
-          (binding [*out* *err*]
-            (println "Evaluation error occurred")))))
+      ;; If verbose mode, responses were already printed
+      (if (:verbose opts)
+        nil  ; Do nothing, already printed in send-eval-message
+        
+        ;; Otherwise process normally
+        (let [processed (process-eval-responses responses)]
+          
+          ;; Print stdout output
+          (doseq [out (:out processed)]
+            (print out))
+          
+          ;; Print stderr output to stderr
+          (doseq [err (:err processed)]
+            (binding [*out* *err*]
+              (print err)
+              (flush)))
+          
+          ;; Print evaluation results
+          (doseq [val (:values processed)]
+            (println val))
+          
+          ;; Handle exceptions
+          (when (:ex processed)
+            (binding [*out* *err*]
+              (println "Exception:" (:ex processed))))
+          
+          ;; Handle empty response
+          (when (and (empty? (:values processed))
+                     (empty? (:out processed))
+                     (empty? (:err processed))
+                     (not (:ex processed)))
+            (when (some #{"eval-error"} (flatten (:status processed)))
+              (binding [*out* *err*]
+                (println "Evaluation error occurred")))))))
     
     (catch Exception e
       (println "Error connecting to nREPL server at" (str host ":" port))
       (println (.getMessage e))
       (System/exit 1))))
 
-(defn load-file [host port file-path]
+(defn load-file [host port file-path opts]
   (let [code (slurp file-path)]
-    (eval-expression host port code)))
+    (eval-expression host port code opts)))
 
 (defn -main [& args]
   (let [opts (cli/parse-opts args {:spec cli-spec})
@@ -189,8 +219,8 @@
       (System/exit 1))
     
     (cond
-      (:e opts) (eval-expression host port (:e opts))
-      (:f opts) (load-file host port (:f opts)))))
+      (:e opts) (eval-expression host port (:e opts) opts)
+      (:f opts) (load-file host port (:f opts) opts))))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (apply -main *command-line-args*))

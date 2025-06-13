@@ -7,8 +7,9 @@
 
 ;; Test helpers
 
-(defn find-free-port []
+(defn find-free-port
   "Find an available port by creating and immediately closing a ServerSocket"
+  []
   (let [socket (java.net.ServerSocket. 0)
         port (.getLocalPort socket)]
     (.close socket)

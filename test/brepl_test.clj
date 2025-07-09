@@ -260,7 +260,7 @@
   (testing "Version display"
     (let [result (run-brepl "--version")]
       (is (= 0 (:exit result)))
-      (is (str/includes? (:out result) "brepl 1.0.0"))))
+      (is (str/includes? (:out result) "brepl 1.1.0"))))
   
   (testing "No port available"
     (let [result (run-brepl "-e" "(+ 1 1)")]

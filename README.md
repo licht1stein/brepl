@@ -1,5 +1,6 @@
 # brepl
 
+[![GitHub release](https://img.shields.io/github/v/release/licht1stein/brepl?label=version)](https://github.com/licht1stein/brepl/releases/latest)
 [![Run Tests](https://github.com/licht1stein/brepl/actions/workflows/test.yml/badge.svg)](https://github.com/licht1stein/brepl/actions/workflows/test.yml)
 
 A fast, lightweight nREPL client for one-shot interactions with any nREPL server.
@@ -45,8 +46,8 @@ bbin install io.github.licht1stein/brepl
 ### Option 2: Download with curl
 
 ```bash
-# Download latest release (v1.0.0)
-curl -sSL https://raw.githubusercontent.com/licht1stein/brepl/v1.0.0/brepl -o brepl
+# Download latest release (v1.1.0)
+curl -sSL https://raw.githubusercontent.com/licht1stein/brepl/v1.1.0/brepl -o brepl
 chmod +x brepl
 # Move to a directory on your PATH
 ```
@@ -62,8 +63,8 @@ let
   brepl = pkgs.callPackage (pkgs.fetchFromGitHub {
     owner = "licht1stein";
     repo = "brepl";
-    rev = "v1.0.0";
-    hash = "sha256-xJGShKrSw6LvzTAAGpYBrhjmANEwAYvFXlhfAcy6aD8=
+    rev = "v1.1.0";
+    hash = "sha256-0000000000000000000000000000000000000000000=
   } + "/package.nix") {};
 in
 pkgs.mkShell {

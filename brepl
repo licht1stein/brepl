@@ -13,7 +13,7 @@
         '[java.io PushbackInputStream])
 
 (def cli-spec
-  {:e {:desc "Expression to evaluate"
+  {:e {:desc "Expression to evaluate (everything after -e is treated as code)"
        :ref "<expr>"}
    :f {:desc "File to load and execute"
        :ref "<file>"}
@@ -177,40 +177,47 @@
   (try
     (let [responses (send-eval-message host port code opts)]
       
-      ;; If verbose mode, responses were already printed
-      (if (:verbose opts)
-        nil  ; Do nothing, already printed in send-eval-message
+      ;; Process responses to check for errors even in verbose mode
+      (let [processed (process-eval-responses responses)
+            has-error? (or (:ex processed)
+                           (some #{"eval-error"} (flatten (:status processed))))]
         
-        ;; Otherwise process normally
-        (let [processed (process-eval-responses responses)]
+        ;; If verbose mode, responses were already printed
+        (if (:verbose opts)
+          has-error?  ; Just return error status
           
-          ;; Print stdout output
-          (doseq [out (:out processed)]
-            (print out))
-          
-          ;; Print stderr output to stderr
-          (doseq [err (:err processed)]
-            (binding [*out* *err*]
-              (print err)
-              (flush)))
-          
-          ;; Print evaluation results
-          (doseq [val (:values processed)]
-            (println val))
-          
-          ;; Handle exceptions
-          (when (:ex processed)
-            (binding [*out* *err*]
-              (println "Exception:" (:ex processed))))
-          
-          ;; Handle empty response
-          (when (and (empty? (:values processed))
-                     (empty? (:out processed))
-                     (empty? (:err processed))
-                     (not (:ex processed)))
-            (when (some #{"eval-error"} (flatten (:status processed)))
+          ;; Otherwise print output normally
+          (do
+            ;; Print stdout output
+            (doseq [out (:out processed)]
+              (print out))
+            
+            ;; Print stderr output to stderr
+            (doseq [err (:err processed)]
               (binding [*out* *err*]
-                (println "Evaluation error occurred")))))))
+                (print err)
+                (flush)))
+            
+            ;; Print evaluation results
+            (doseq [val (:values processed)]
+              (println val))
+            
+            ;; Handle exceptions
+            (when (:ex processed)
+              (binding [*out* *err*]
+                (println "Exception:" (:ex processed))))
+            
+            ;; Handle empty response
+            (when (and (empty? (:values processed))
+                       (empty? (:out processed))
+                       (empty? (:err processed))
+                       (not (:ex processed)))
+              (when (some #{"eval-error"} (flatten (:status processed)))
+                (binding [*out* *err*]
+                  (println "Evaluation error occurred"))))
+            
+            ;; Return error status
+            has-error?))))
     
     (catch Exception e
       (println "Error connecting to nREPL server at" (str host ":" port))
@@ -287,7 +294,22 @@
         (pp/pprint (convert-bytes-in-map resp))))))
 
 (defn -main [& args]
-  (let [opts (cli/parse-opts args {:spec cli-spec})
+  ;; Special handling for -e flag to treat everything after it as Clojure code
+  (let [args-vec (vec args)
+        e-index (.indexOf args-vec "-e")
+        ;; If -e is found and there are args after it, reconstruct the expression
+        [args expr] (if (and (>= e-index 0) (< (inc e-index) (count args-vec)))
+                      (let [before-e (take e-index args-vec)
+                            after-e (drop (inc e-index) args-vec)
+                            ;; Join all args after -e with spaces to form the expression
+                            expr-str (str/join " " after-e)
+                            ;; Reconstruct args with the joined expression
+                            new-args (vec (concat before-e ["-e" expr-str]))]
+                        [new-args expr-str])
+                      [args nil])
+        opts (cli/parse-opts args {:spec cli-spec})
+        ;; Use the reconstructed expression if available
+        opts (if expr (assoc opts :e expr) opts)
         host (resolve-host (:h opts))
         port (resolve-port (:p opts))]
     
@@ -297,10 +319,13 @@
       (println "Error: No port specified, no .nrepl-port file found, and BREPL_PORT not set")
       (System/exit 1))
     
-    (cond
-      (:e opts) (eval-expression host port (:e opts) opts)
-      (:f opts) (load-file host port (:f opts) opts)
-      (:m opts) (process-raw-message host port (:m opts) opts))))
+    (let [has-error? (cond
+                       (:e opts) (eval-expression host port (:e opts) opts)
+                       (:f opts) (load-file host port (:f opts) opts)
+                       (:m opts) (do (process-raw-message host port (:m opts) opts)
+                                     false))]  ; raw messages don't track errors
+      (when has-error?
+        (System/exit 1)))))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (apply -main *command-line-args*))

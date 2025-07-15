@@ -46,8 +46,8 @@ bbin install io.github.licht1stein/brepl
 ### Option 2: Download with curl
 
 ```bash
-# Download latest release (v1.1.0)
-curl -sSL https://raw.githubusercontent.com/licht1stein/brepl/v1.1.0/brepl -o brepl
+# Download latest release (v1.2.0)
+curl -sSL https://raw.githubusercontent.com/licht1stein/brepl/v1.2.0/brepl -o brepl
 chmod +x brepl
 # Move to a directory on your PATH
 ```
@@ -63,8 +63,8 @@ let
   brepl = pkgs.callPackage (pkgs.fetchFromGitHub {
     owner = "licht1stein";
     repo = "brepl";
-    rev = "v1.1.0";
-    hash = "sha256-thP7paqxAztNckljHTc7eIj1UI1IP/xSel8XA9U1Lk8=";
+    rev = "v1.2.0";
+    hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
   } + "/package.nix") {};
 in
 pkgs.mkShell {
@@ -104,6 +104,7 @@ Then run `nix-shell` to enter a shell with brepl available.
       --verbose              Show raw nREPL messages instead of parsed output
       --version              Show brepl version
   -?, --help                 Show help message
+      --hook                 Output Claude Code hook-compatible JSON format
 ```
 
 ### Basic Usage
@@ -250,6 +251,76 @@ For a complete list of standard nREPL operations, see the [nREPL documentation](
 # Debug mode - see full message exchange
 brepl -m '{"op" "describe"}' --verbose
 ```
+
+### Using as a Claude Code Hook
+
+The `--hook` flag enables brepl to output JSON in a format compatible with Claude Code hooks. This allows automatic validation of Clojure files during AI-assisted development.
+
+#### Setting up Claude Code Hook
+
+Add this to your Claude Code settings (`~/.claude/settings.json`):
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "(?i)edit|write|replace",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r 'select(.tool_input.file_path // .tool_input.path) | (.tool_input.file_path // .tool_input.path) | select(test(\"\\\\.clj[sc]?$\"))' | while read f; do brepl --hook -f \"$f\"; done"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+This hook will:
+1. Intercept file edits made by Claude
+2. Filter for Clojure files (`.clj`, `.cljs`, `.cljc`)
+3. Automatically load each edited file into your running REPL
+4. Stop Claude if evaluation errors occur
+
+#### Hook Output Format
+
+When using `--hook`, brepl outputs JSON instead of plain text:
+
+**Success:**
+```json
+{"continue": true, "suppressOutput": true}
+```
+
+**Error:**
+```json
+{
+  "continue": false,
+  "stopReason": "Exception: class java.lang.ArithmeticException | Error: Divide by zero",
+  "suppressOutput": true,
+  "decision": "block",
+  "reason": "Code evaluation failed:\njava.lang.ArithmeticException: Divide by zero at line 1"
+}
+```
+
+#### Example Usage
+
+```bash
+# Normal mode - human-readable output
+brepl -f my-code.clj
+# => Function loaded successfully
+
+# Hook mode - JSON output for Claude
+brepl --hook -f my-code.clj
+# => {"continue": true, "suppressOutput": true}
+
+# Hook mode with error
+brepl --hook -e '(/ 1 0)'
+# => {"continue": false, "stopReason": "Exception: ...", ...}
+```
+
+The hook ensures that Claude stops and alerts you when code changes introduce errors, maintaining a working REPL state throughout your development session.
 
 ## Troubleshooting
 

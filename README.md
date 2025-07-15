@@ -64,7 +64,7 @@ let
     owner = "licht1stein";
     repo = "brepl";
     rev = "v1.2.0";
-    hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+    hash = "sha256-3w84CkbC4rkrQIFxviSSsTjIzZSpf1BenR0WIlm4UT8=";
   } + "/package.nix") {};
 in
 pkgs.mkShell {

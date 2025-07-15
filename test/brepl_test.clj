@@ -18,7 +18,7 @@
 (defn run-brepl
   "Run brepl command and return output map with :exit, :out, and :err"
   [& args]
-  (apply shell {:out :string :err :string :continue true :timeout 5000} 
+  (apply shell {:out :string :err :string :continue true :timeout 5000}
          "./brepl" (map str args)))
 
 (defn with-temp-file
@@ -64,12 +64,12 @@
           (is (= 0 (:exit result)))
           (is (= "6\n" (:out result)))
           (is (empty? (:err result)))))
-      
+
       (testing "String operations"
         (let [result (run-brepl "-p" port "-e" "(str \"Hello\" \" \" \"World\")")]
           (is (= 0 (:exit result)))
           (is (= "\"Hello World\"\n" (:out result)))))
-      
+
       (testing "Multiple forms with def"
         (let [result (run-brepl "-p" port "-e" "(do (def x 5) (* x 2))")]
           (is (= 0 (:exit result)))
@@ -86,17 +86,17 @@
             (let [result (run-brepl "-p" port "-f" filepath)]
               (is (= 0 (:exit result)))
               (is (= "42\n" (:out result)))))))
-      
+
       (testing "Multi-expression file"
-        (with-temp-file "test" ".clj" 
+        (with-temp-file "test" ".clj"
           "(def x 10)\n(def y 20)\n(+ x y)"
           (fn [filepath]
             (let [result (run-brepl "-p" port "-f" filepath)]
               (is (= 0 (:exit result)))
               (is (str/includes? (:out result) "30"))))))
-      
+
       (testing "File with println"
-        (with-temp-file "test" ".clj" 
+        (with-temp-file "test" ".clj"
           "(println \"Starting...\")\n(+ 2 3)\n(println \"Done!\")"
           (fn [filepath]
             (let [result (run-brepl "-p" port "-f" filepath)]
@@ -115,18 +115,18 @@
           (is (= 0 (:exit result)))
           (is (str/includes? (:err result) "ArithmeticException"))
           (is (str/includes? (:err result) "Divide by zero"))))
-      
+
       (testing "Undefined symbol"
         (let [result (run-brepl "-p" port "-e" "undefined-var")]
           (is (= 0 (:exit result)))
           (is (str/includes? (:err result) "Could not resolve symbol"))))
-      
+
       (testing "Syntax error"
         (let [result (run-brepl "-p" port "-e" "(defn bad [)")]
           (is (= 0 (:exit result)))
           (is (or (str/includes? (:err result) "EOF")
                   (str/includes? (:err result) "Unmatched delimiter")))))
-      
+
       (testing "File not found"
         (let [result (run-brepl "-p" port "-f" "nonexistent.clj")]
           (is (= 1 (:exit result)))
@@ -142,14 +142,14 @@
           (is (= 0 (:exit result)))
           (is (str/includes? (:out result) "test output"))
           (is (str/includes? (:out result) "nil"))))
-      
+
       (testing "Multiple println statements"
         (let [result (run-brepl "-p" port "-e" "(do (println \"Line 1\") (println \"Line 2\") :done)")]
           (is (= 0 (:exit result)))
           (is (str/includes? (:out result) "Line 1"))
           (is (str/includes? (:out result) "Line 2"))
           (is (str/includes? (:out result) ":done"))))
-      
+
       (testing "Mixed output and return value"
         (let [result (run-brepl "-p" port "-e" "(do (println \"Computing...\") (+ 10 20))")]
           (is (= 0 (:exit result)))
@@ -165,21 +165,21 @@
         (let [result (run-brepl "-p" port "-e" "(+ 1 1)")]
           (is (= 0 (:exit result)))
           (is (= "2\n" (:out result)))))
-      
+
       (testing "Port from .nrepl-port file"
         (with-nrepl-port-file port
           (fn []
             (let [result (run-brepl "-e" "(+ 2 2)")]
               (is (= 0 (:exit result)))
               (is (= "4\n" (:out result)))))))
-      
+
       (testing "Port from environment variable"
         (let [result (shell {:out :string :err :string :continue true
-                            :extra-env {"BREPL_PORT" (str port)}}
-                           "./brepl" "-e" "(+ 3 3)")]
+                             :extra-env {"BREPL_PORT" (str port)}}
+                            "./brepl" "-e" "(+ 3 3)")]
           (is (= 0 (:exit result)))
           (is (= "6\n" (:out result)))))
-      
+
       (testing "Port precedence: CLI > file > env"
         (let [other-port (find-free-port)]
           (with-nrepl-port-file other-port
@@ -198,16 +198,16 @@
         (let [result (run-brepl "-p" port "-e" "\"connected\"")]
           (is (= 0 (:exit result)))
           (is (= "\"connected\"\n" (:out result)))))
-      
+
       (testing "Custom host"
         (let [result (run-brepl "-h" "127.0.0.1" "-p" port "-e" "\"custom-host\"")]
           (is (= 0 (:exit result)))
           (is (= "\"custom-host\"\n" (:out result)))))
-      
+
       (testing "Host from environment variable"
         (let [result (shell {:out :string :err :string :continue true
-                            :extra-env {"BREPL_HOST" "localhost"}}
-                           "./brepl" "-p" (str port) "-e" "\"env-host\"")]
+                             :extra-env {"BREPL_HOST" "localhost"}}
+                            "./brepl" "-p" (str port) "-e" "\"env-host\"")]
           (is (= 0 (:exit result)))
           (is (= "\"env-host\"\n" (:out result))))))))
 
@@ -225,7 +225,7 @@
           ;; Check for response
           (is (str/includes? (:out result) "\"value\" \"3\""))
           (is (str/includes? (:out result) "\"status\" [\"done\"]"))))
-      
+
       (testing "Verbose mode with error"
         (let [result (run-brepl "-p" port "-e" "(/ 1 0)" "--verbose")]
           (is (= 0 (:exit result)))
@@ -239,29 +239,29 @@
     (let [result (run-brepl)]
       (is (= 1 (:exit result)))
       (is (str/includes? (:out result) "Must specify one of -e EXPR, -f FILE, or -m MESSAGE"))))
-  
+
   (testing "Multiple options specified"
     (let [result (run-brepl "-e" "(+ 1 1)" "-f" "test.clj")]
       (is (= 1 (:exit result)))
       (is (str/includes? (:out result) "Cannot specify multiple options"))))
-  
+
   (testing "Both -e and -m specified"
     (let [result (run-brepl "-e" "(+ 1 1)" "-m" "{\"op\" \"eval\"}")]
       (is (= 1 (:exit result)))
       (is (str/includes? (:out result) "Cannot specify multiple options"))))
-  
+
   (testing "Help display"
     (let [result (run-brepl "--help")]
       (is (= 0 (:exit result)))
       (is (str/includes? (:out result) "brepl - Fast Babashka nREPL client"))
       (is (str/includes? (:out result) "USAGE:"))
       (is (str/includes? (:out result) "OPTIONS:"))))
-  
+
   (testing "Version display"
     (let [result (run-brepl "--version")]
       (is (= 0 (:exit result)))
-      (is (str/includes? (:out result) "brepl 1.1.0"))))
-  
+      (is (str/includes? (:out result) "brepl 1.3.0"))))
+
   (testing "No port available"
     (let [result (run-brepl "-e" "(+ 1 1)")]
       (is (= 1 (:exit result)))
@@ -287,24 +287,155 @@
           (is (str/includes? (:out result) "\"ops\""))
           (is (str/includes? (:out result) "\"eval\""))
           (is (str/includes? (:out result) "\"status\" [\"done\"]"))))
-      
+
       (testing "Send raw ls-sessions message"
         (let [result (run-brepl "-p" port "-m" "{\"op\" \"ls-sessions\"}")]
           (is (= 0 (:exit result)))
           (is (str/includes? (:out result) "\"sessions\""))
           (is (str/includes? (:out result) "\"status\" [\"done\"]"))))
-      
+
       (testing "Raw message with verbose mode"
         (let [result (run-brepl "-p" port "-m" "{\"op\" \"describe\"}" "--verbose")]
           (is (= 0 (:exit result)))
           ;; Should show both request and response
           (is (str/includes? (:out result) "\"op\" \"describe\""))
           (is (str/includes? (:out result) "\"ops\""))))
-      
+
       (testing "Invalid EDN in message"
         (let [result (run-brepl "-p" port "-m" "{invalid")]
           (is (= 1 (:exit result)))
           (is (str/includes? (:out result) "Error sending message")))))))
+
+;; File-based port resolution tests
+
+(deftest file-port-resolution-test
+  (with-nrepl-server
+    (fn [port]
+      (testing "Port from file's parent directory"
+        ;; Create temporary directory structure
+        (let [temp-dir (io/file (System/getProperty "java.io.tmpdir")
+                                (str "brepl-test-" (System/currentTimeMillis)))
+              sub-dir (io/file temp-dir "sub")
+              test-file (io/file sub-dir "test.clj")
+              port-file (io/file temp-dir ".nrepl-port")]
+          (try
+            ;; Create directory structure
+            (.mkdirs sub-dir)
+            ;; Create .nrepl-port file in parent directory
+            (spit port-file (str port))
+            ;; Create test file
+            (spit test-file "(println \"From parent port\")")
+
+            ;; Run brepl with -f option
+            (let [result (run-brepl "-f" (.getAbsolutePath test-file))]
+              (is (= 0 (:exit result)))
+              (is (= "From parent port\n" (:out result))))
+
+            (finally
+              ;; Cleanup
+              (when (.exists test-file) (.delete test-file))
+              (when (.exists port-file) (.delete port-file))
+              (when (.exists sub-dir) (.delete sub-dir))
+              (when (.exists temp-dir) (.delete temp-dir))))))
+
+      (testing "Port from file's ancestor directory"
+        ;; Create deeper directory structure
+        (let [temp-dir (io/file (System/getProperty "java.io.tmpdir")
+                                (str "brepl-test-" (System/currentTimeMillis)))
+              sub-dir1 (io/file temp-dir "a")
+              sub-dir2 (io/file sub-dir1 "b")
+              sub-dir3 (io/file sub-dir2 "c")
+              test-file (io/file sub-dir3 "deep-test.clj")
+              port-file (io/file temp-dir ".nrepl-port")]
+          (try
+            ;; Create directory structure
+            (.mkdirs sub-dir3)
+            ;; Create .nrepl-port file in root directory
+            (spit port-file (str port))
+            ;; Create test file
+            (spit test-file "(println \"From ancestor port\")")
+
+            ;; Run brepl with -f option
+            (let [result (run-brepl "-f" (.getAbsolutePath test-file))]
+              (is (= 0 (:exit result)))
+              (is (= "From ancestor port\n" (:out result))))
+
+            (finally
+              ;; Cleanup
+              (when (.exists test-file) (.delete test-file))
+              (when (.exists port-file) (.delete port-file))
+              (when (.exists sub-dir3) (.delete sub-dir3))
+              (when (.exists sub-dir2) (.delete sub-dir2))
+              (when (.exists sub-dir1) (.delete sub-dir1))
+              (when (.exists temp-dir) (.delete temp-dir))))))
+
+      (testing "Multiple projects with different ports"
+        ;; Create two project structures
+        (let [project1-dir (io/file (System/getProperty "java.io.tmpdir")
+                                    (str "project1-" (System/currentTimeMillis)))
+              project2-dir (io/file (System/getProperty "java.io.tmpdir")
+                                    (str "project2-" (System/currentTimeMillis)))
+              file1 (io/file project1-dir "file1.clj")
+              file2 (io/file project2-dir "file2.clj")
+              port1-file (io/file project1-dir ".nrepl-port")
+              port2-file (io/file project2-dir ".nrepl-port")
+              ;; Use a different port for project2
+              port2 (find-free-port)]
+          (try
+            ;; Create directories
+            (.mkdirs project1-dir)
+            (.mkdirs project2-dir)
+
+            ;; Create .nrepl-port files
+            (spit port1-file (str port))
+            (spit port2-file (str port2))
+
+            ;; Create test files
+            (spit file1 "(println \"Project 1\")")
+            (spit file2 "(println \"Project 2\")")
+
+            ;; Test project1 uses correct port
+            (let [result1 (run-brepl "-f" (.getAbsolutePath file1))]
+              (is (= 0 (:exit result1)))
+              (is (= "Project 1\n" (:out result1))))
+
+            ;; Project2 would fail since port2 doesn't have a server
+            ;; This is expected behavior - we're just testing port resolution
+
+            (finally
+              ;; Cleanup
+              (when (.exists file1) (.delete file1))
+              (when (.exists file2) (.delete file2))
+              (when (.exists port1-file) (.delete port1-file))
+              (when (.exists port2-file) (.delete port2-file))
+              (when (.exists project1-dir) (.delete project1-dir))
+              (when (.exists project2-dir) (.delete project2-dir))))))
+
+      (testing "CLI port overrides file-based discovery"
+        ;; Create directory structure with .nrepl-port
+        (let [temp-dir (io/file (System/getProperty "java.io.tmpdir")
+                                (str "brepl-test-" (System/currentTimeMillis)))
+              test-file (io/file temp-dir "test.clj")
+              port-file (io/file temp-dir ".nrepl-port")
+              wrong-port (find-free-port)]
+          (try
+            ;; Create directory
+            (.mkdirs temp-dir)
+            ;; Create .nrepl-port file with wrong port
+            (spit port-file (str wrong-port))
+            ;; Create test file
+            (spit test-file "(println \"Using CLI port\")")
+
+            ;; Run brepl with explicit -p option (should override file)
+            (let [result (run-brepl "-p" port "-f" (.getAbsolutePath test-file))]
+              (is (= 0 (:exit result)))
+              (is (= "Using CLI port\n" (:out result))))
+
+            (finally
+              ;; Cleanup
+              (when (.exists test-file) (.delete test-file))
+              (when (.exists port-file) (.delete port-file))
+              (when (.exists temp-dir) (.delete temp-dir)))))))))
 
 ;; Edge cases tests
 
@@ -315,17 +446,17 @@
         (let [result (run-brepl "-p" port "-e" "nil")]
           (is (= 0 (:exit result)))
           (is (= "" (:out result)))))
-      
+
       (testing "Very large number"
         (let [result (run-brepl "-p" port "-e" "123456789012345678901234567890N")]
           (is (= 0 (:exit result)))
           (is (str/includes? (:out result) "123456789012345678901234567890N"))))
-      
+
       (testing "Special characters in strings"
         (let [result (run-brepl "-p" port "-e" "(str \"Hello\\nWorld\\t!\")")]
           (is (= 0 (:exit result)))
           (is (str/includes? (:out result) "Hello\\nWorld\\t!"))))
-      
+
       (testing "Multiple expressions in do block"
         (let [result (run-brepl "-p" port "-e" "(do (println \"First\") (println \"Second\") (+ 1 2))")]
           (is (= 0 (:exit result)))

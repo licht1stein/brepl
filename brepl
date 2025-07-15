@@ -1,6 +1,6 @@
 #!/usr/bin/env bb
 
-(def version "1.2.0")
+(def version "1.3.0")
 
 (require '[babashka.cli :as cli]
          '[clojure.java.io :as io]
@@ -47,7 +47,9 @@
   (println "PORT RESOLUTION:")
   (println "    Port is resolved in the following order:")
   (println "    1. -p <port> command line argument")
-  (println "    2. .nrepl-port file in current directory")
+  (println "    2. .nrepl-port file:")
+  (println "       - For -f: searches from file's directory upward to find project-specific port")
+  (println "       - For -e/-m: uses .nrepl-port in current directory")
   (println "    3. BREPL_PORT environment variable")
   (println "    4. Error if none found")
   (println)
@@ -64,17 +66,50 @@
         str/trim
         Integer/parseInt)))
 
+(defn find-nrepl-port-in-parents
+  "Search for .nrepl-port file starting from the given directory and walking up the directory tree.
+  Returns the port number from the first .nrepl-port file found, or nil if none found."
+  [start-dir]
+  (loop [dir (io/file start-dir)]
+    (when dir
+      (let [port-file (io/file dir ".nrepl-port")]
+        (if (.exists port-file)
+          (let [port (try
+                       (-> (slurp port-file)
+                           str/trim
+                           Integer/parseInt)
+                       (catch Exception e
+                         ;; If we can't parse the port file, continue searching
+                         nil))]
+            (if port
+              port
+              (recur (.getParentFile dir))))
+          (recur (.getParentFile dir)))))))
+
 (defn get-env-var [var-name]
   (System/getenv var-name))
 
 (defn resolve-host [cli-host]
   (or cli-host (get-env-var "BREPL_HOST") "localhost"))
 
-(defn resolve-port [cli-port]
-  (or cli-port
-      (read-nrepl-port)
-      (when-let [env-port (get-env-var "BREPL_PORT")]
-        (Integer/parseInt env-port))))
+(defn resolve-port 
+  "Resolve the nREPL port from various sources.
+  Priority: CLI arg > .nrepl-port file > BREPL_PORT env var
+  When file-path is provided (for -f option), searches for .nrepl-port 
+  starting from the file's directory and walking up the tree."
+  ([cli-port] (resolve-port cli-port nil))
+  ([cli-port file-path]
+   (or cli-port
+       (if file-path
+         ;; For -f option: search from file's directory upward
+         (let [file (io/file file-path)
+               parent-dir (.getParentFile file)]
+           (when parent-dir
+             (find-nrepl-port-in-parents parent-dir)))
+         ;; For -e and -m options: use current directory
+         (read-nrepl-port))
+       (when-let [env-port (get-env-var "BREPL_PORT")]
+         (Integer/parseInt env-port)))))
 
 (defn validate-args [opts]
   (when (:help opts)
@@ -372,7 +407,7 @@
         ;; Use the reconstructed expression if available
         opts (if expr (assoc opts :e expr) opts)
         host (resolve-host (:h opts))
-        port (resolve-port (:p opts))]
+        port (resolve-port (:p opts) (:f opts))]
 
     (validate-args opts)
 

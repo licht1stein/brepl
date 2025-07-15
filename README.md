@@ -28,6 +28,7 @@ You need to specify the port with `-p 1667` since Babashka doesn't create a `.nr
 - 📝 **Expression evaluation** - Evaluate Clojure expressions directly from command line
 - 📁 **File loading** - Load and execute entire Clojure files
 - 🔍 **Auto-discovery** - Automatically detects `.nrepl-port` files
+- 📂 **Project-aware** (v1.3.0) - Finds `.nrepl-port` by walking up from file's directory
 - ⚙️ **Flexible configuration** - Support for environment variables and CLI arguments
 - 🐛 **Proper error handling** - Shows exceptions and stack traces
 - 📊 **Verbose mode** - Debug nREPL communication with `--verbose`
@@ -46,8 +47,8 @@ bbin install io.github.licht1stein/brepl
 ### Option 2: Download with curl
 
 ```bash
-# Download latest release (v1.2.0)
-curl -sSL https://raw.githubusercontent.com/licht1stein/brepl/v1.2.0/brepl -o brepl
+# Download latest release (v1.3.0)
+curl -sSL https://raw.githubusercontent.com/licht1stein/brepl/v1.3.0/brepl -o brepl
 chmod +x brepl
 # Move to a directory on your PATH
 ```
@@ -63,8 +64,8 @@ let
   brepl = pkgs.callPackage (pkgs.fetchFromGitHub {
     owner = "licht1stein";
     repo = "brepl";
-    rev = "v1.2.0";
-    hash = "sha256-3w84CkbC4rkrQIFxviSSsTjIzZSpf1BenR0WIlm4UT8=";
+    rev = "v1.3.0";
+    hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
   } + "/package.nix") {};
 in
 pkgs.mkShell {
@@ -125,7 +126,9 @@ brepl -e '(println "Hello, World!")'
 The **port is required** and resolved in this order:
 
 1. **Command line:** `-p 7888`
-2. **Auto-detect:** `.nrepl-port` file in current directory
+2. **Auto-detect:** `.nrepl-port` file
+   - For `-f` flag: searches from the file's directory upward (v1.3.0+)
+   - For `-e`/`-m` flags: uses current directory
 3. **Environment:** `BREPL_PORT=7888`
 
 ```bash
@@ -137,7 +140,38 @@ BREPL_PORT=7888 brepl -e '(+ 1 2)'
 
 # Auto-detect from .nrepl-port (most common)
 brepl -e '(+ 1 2)'
+
+# NEW in v1.3.0: File-based project detection
+# If you have multiple projects with different nREPL servers:
+#   project1/.nrepl-port (port 7000)
+#   project2/.nrepl-port (port 8000)
+brepl -f project1/src/core.clj  # Uses port 7000
+brepl -f project2/src/app.clj   # Uses port 8000
 ```
+
+#### Project-Aware Port Discovery (v1.3.0+)
+
+When using the `-f` flag, brepl now searches for `.nrepl-port` files starting from the file's directory and walking up the directory tree. This allows you to work with multiple projects simultaneously:
+
+```bash
+# Directory structure:
+# ~/projects/
+#   ├── backend/
+#   │   ├── .nrepl-port (7000)
+#   │   └── src/api/handler.clj
+#   └── frontend/
+#       ├── .nrepl-port (8000)
+#       └── src/ui/core.cljs
+
+# Automatically uses the correct nREPL server for each project:
+brepl -f ~/projects/backend/src/api/handler.clj    # Connects to port 7000
+brepl -f ~/projects/frontend/src/ui/core.cljs      # Connects to port 8000
+```
+
+This is especially useful when:
+- Working with monorepos containing multiple services
+- Switching between different projects frequently
+- Using editor integrations that operate on individual files
 
 ### Remote Connections
 

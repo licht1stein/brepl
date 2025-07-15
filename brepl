@@ -1,6 +1,6 @@
 #!/usr/bin/env bb
 
-(def version "1.3.0")
+(def version "1.3.1")
 
 (require '[babashka.cli :as cli]
          '[clojure.java.io :as io]
@@ -320,8 +320,8 @@
           (println (.getMessage e))
           (System/exit 1))))))
 
-(defn load-file [host port file-path opts]
-  (let [code (slurp file-path)]
+(defn eval-file [host port file-path opts]
+  (let [code (str "(load-file \"" file-path "\")")]
     (eval-expression host port code opts)))
 
 (defn send-raw-message [host port message-str opts]
@@ -390,22 +390,7 @@
         (pp/pprint (convert-bytes-in-map resp))))))
 
 (defn -main [& args]
-  ;; Special handling for -e flag to treat everything after it as Clojure code
-  (let [args-vec (vec args)
-        e-index (.indexOf args-vec "-e")
-        ;; If -e is found and there are args after it, reconstruct the expression
-        [args expr] (if (and (>= e-index 0) (< (inc e-index) (count args-vec)))
-                      (let [before-e (take e-index args-vec)
-                            after-e (drop (inc e-index) args-vec)
-                            ;; Join all args after -e with spaces to form the expression
-                            expr-str (str/join " " after-e)
-                            ;; Reconstruct args with the joined expression
-                            new-args (vec (concat before-e ["-e" expr-str]))]
-                        [new-args expr-str])
-                      [args nil])
-        opts (cli/parse-opts args {:spec cli-spec})
-        ;; Use the reconstructed expression if available
-        opts (if expr (assoc opts :e expr) opts)
+  (let [opts (cli/parse-opts args {:spec cli-spec})
         host (resolve-host (:h opts))
         port (resolve-port (:p opts) (:f opts))]
 
@@ -417,7 +402,7 @@
 
     (let [result (cond
                    (:e opts) (eval-expression host port (:e opts) opts)
-                   (:f opts) (load-file host port (:f opts) opts)
+                   (:f opts) (eval-file host port (:f opts) opts)
                    (:m opts) (do (process-raw-message host port (:m opts) opts)
                                  false))] ; raw messages don't track errors
 

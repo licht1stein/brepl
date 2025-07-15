@@ -3,7 +3,8 @@
             [babashka.process :refer [shell]]
             [clojure.test :refer [deftest is testing]]
             [clojure.string :as str]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [cheshire.core :as json]))
 
 ;; Test helpers
 
@@ -102,8 +103,8 @@
             (let [result (run-brepl "-p" port "-f" filepath)]
               (is (= 0 (:exit result)))
               (is (str/includes? (:out result) "Starting..."))
-              (is (str/includes? (:out result) "5"))
-              (is (str/includes? (:out result) "Done!")))))))))
+              (is (str/includes? (:out result) "Done!"))
+              (is (str/includes? (:out result) "nil")))))))))
 
 ;; Error handling tests
 
@@ -112,18 +113,18 @@
     (fn [port]
       (testing "Division by zero"
         (let [result (run-brepl "-p" port "-e" "(/ 1 0)")]
-          (is (= 0 (:exit result)))
+          (is (= 2 (:exit result)))
           (is (str/includes? (:err result) "ArithmeticException"))
           (is (str/includes? (:err result) "Divide by zero"))))
 
       (testing "Undefined symbol"
         (let [result (run-brepl "-p" port "-e" "undefined-var")]
-          (is (= 0 (:exit result)))
+          (is (= 2 (:exit result)))
           (is (str/includes? (:err result) "Could not resolve symbol"))))
 
       (testing "Syntax error"
         (let [result (run-brepl "-p" port "-e" "(defn bad [)")]
-          (is (= 0 (:exit result)))
+          (is (= 2 (:exit result)))
           (is (or (str/includes? (:err result) "EOF")
                   (str/includes? (:err result) "Unmatched delimiter")))))
 
@@ -217,7 +218,7 @@
   (with-nrepl-server
     (fn [port]
       (testing "Verbose mode shows nREPL conversation"
-        (let [result (run-brepl "-p" port "-e" "(+ 1 2)" "--verbose")]
+        (let [result (run-brepl "-p" port "--verbose" "-e" "(+ 1 2)")]
           (is (= 0 (:exit result)))
           ;; Check for request
           (is (str/includes? (:out result) "\"op\" \"eval\""))
@@ -227,7 +228,7 @@
           (is (str/includes? (:out result) "\"status\" [\"done\"]"))))
 
       (testing "Verbose mode with error"
-        (let [result (run-brepl "-p" port "-e" "(/ 1 0)" "--verbose")]
+        (let [result (run-brepl "-p" port "--verbose" "-e" "(/ 1 0)")]
           (is (= 0 (:exit result)))
           (is (str/includes? (:out result) "\"status\" [\"eval-error\"]"))
           (is (str/includes? (:out result) "ArithmeticException")))))))
@@ -260,7 +261,7 @@
   (testing "Version display"
     (let [result (run-brepl "--version")]
       (is (= 0 (:exit result)))
-      (is (str/includes? (:out result) "brepl 1.3.0"))))
+      (is (re-find #"brepl \d+\.\d+\.\d+" (:out result)))))
 
   (testing "No port available"
     (let [result (run-brepl "-e" "(+ 1 1)")]
@@ -295,7 +296,7 @@
           (is (str/includes? (:out result) "\"status\" [\"done\"]"))))
 
       (testing "Raw message with verbose mode"
-        (let [result (run-brepl "-p" port "-m" "{\"op\" \"describe\"}" "--verbose")]
+        (let [result (run-brepl "-p" port "--verbose" "-m" "{\"op\" \"describe\"}")]
           (is (= 0 (:exit result)))
           ;; Should show both request and response
           (is (str/includes? (:out result) "\"op\" \"describe\""))
@@ -329,7 +330,7 @@
             ;; Run brepl with -f option
             (let [result (run-brepl "-f" (.getAbsolutePath test-file))]
               (is (= 0 (:exit result)))
-              (is (= "From parent port\n" (:out result))))
+              (is (= "From parent port\nnil\n" (:out result))))
 
             (finally
               ;; Cleanup
@@ -358,7 +359,7 @@
             ;; Run brepl with -f option
             (let [result (run-brepl "-f" (.getAbsolutePath test-file))]
               (is (= 0 (:exit result)))
-              (is (= "From ancestor port\n" (:out result))))
+              (is (= "From ancestor port\nnil\n" (:out result))))
 
             (finally
               ;; Cleanup
@@ -397,7 +398,7 @@
             ;; Test project1 uses correct port
             (let [result1 (run-brepl "-f" (.getAbsolutePath file1))]
               (is (= 0 (:exit result1)))
-              (is (= "Project 1\n" (:out result1))))
+              (is (= "Project 1\nnil\n" (:out result1))))
 
             ;; Project2 would fail since port2 doesn't have a server
             ;; This is expected behavior - we're just testing port resolution
@@ -429,7 +430,7 @@
             ;; Run brepl with explicit -p option (should override file)
             (let [result (run-brepl "-p" port "-f" (.getAbsolutePath test-file))]
               (is (= 0 (:exit result)))
-              (is (= "Using CLI port\n" (:out result))))
+              (is (= "Using CLI port\nnil\n" (:out result))))
 
             (finally
               ;; Cleanup
@@ -442,7 +443,7 @@
 (deftest edge-cases-test
   (with-nrepl-server
     (fn [port]
-      (testing "Nil value returns successfully with no output"
+      (testing "Nil value returns successfully"
         (let [result (run-brepl "-p" port "-e" "nil")]
           (is (= 0 (:exit result)))
           (is (= "" (:out result)))))
@@ -463,3 +464,38 @@
           (is (str/includes? (:out result) "First"))
           (is (str/includes? (:out result) "Second"))
           (is (str/includes? (:out result) "3")))))))
+
+;; Hook mode tests
+
+(deftest hook-mode-test
+  (with-nrepl-server
+    (fn [port]
+      (testing "Hook mode with successful evaluation"
+        (let [result (run-brepl "-p" port "-e" "(+ 1 2 3)" "--hook")]
+          (is (= 0 (:exit result)))
+          (let [output (json/parse-string (:out result) true)]
+            (is (= true (:continue output)))
+            (is (= true (:suppressOutput output)))
+            (is (not (contains? output :decision))))))
+      
+      (testing "Hook mode with error"
+        (let [result (run-brepl "-p" port "-e" "(/ 1 0)" "--hook")]
+          (is (= 2 (:exit result)))
+          (let [output (json/parse-string (:out result) true)]
+            (is (= true (:continue output)))
+            (is (= true (:suppressOutput output)))
+            (is (= "block" (:decision output)))
+            (is (str/includes? (:reason output) "Code evaluation failed"))
+            (is (str/includes? (:reason output) "ArithmeticException"))
+            (is (str/includes? (:stopReason output) "Exception")))))
+      
+      (testing "Hook mode with file evaluation error"
+        (with-temp-file "test" ".clj"
+          "(println \"Testing hook\")\n(/ 1 0)"
+          (fn [filepath]
+            (let [result (run-brepl "-p" port "-f" filepath "--hook")]
+              (is (= 2 (:exit result)))
+              (let [output (json/parse-string (:out result) true)]
+                (is (= true (:continue output)))
+                (is (= "block" (:decision output)))
+                (is (str/includes? (:reason output) "ArithmeticException"))))))))))

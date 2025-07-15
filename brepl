@@ -248,7 +248,7 @@
                        (str "Code evaluation failed:\n" (str/join "\n" reason-parts))
                        "Code contains errors that must be fixed")]
 
-      {:continue false
+      {:continue true
        :stopReason error-msg
        :suppressOutput true
        :decision "block"

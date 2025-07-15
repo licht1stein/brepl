@@ -47,8 +47,8 @@ bbin install io.github.licht1stein/brepl
 ### Option 2: Download with curl
 
 ```bash
-# Download latest release (v1.3.0)
-curl -sSL https://raw.githubusercontent.com/licht1stein/brepl/v1.3.0/brepl -o brepl
+# Download latest release (v1.3.1)
+curl -sSL https://raw.githubusercontent.com/licht1stein/brepl/v1.3.1/brepl -o brepl
 chmod +x brepl
 # Move to a directory on your PATH
 ```
@@ -64,8 +64,8 @@ let
   brepl = pkgs.callPackage (pkgs.fetchFromGitHub {
     owner = "licht1stein";
     repo = "brepl";
-    rev = "v1.3.0";
-    hash = "sha256-n2X8LXvLoCkU7LZIqIK7D8xwzyIKNBb+3UUxKPEX9fQ=";
+    rev = "v1.3.1";
+    hash = "sha256-ZPydBe1Wszy2URmposABdnpQiniG0ZMABRNW1UIPFgQ=";
   } + "/package.nix") {};
 in
 pkgs.mkShell {

@@ -7,7 +7,8 @@
          '[clojure.string :as str]
          '[bencode.core :as bencode]
          '[clojure.pprint :as pp]
-         '[clojure.walk :as walk])
+         '[clojure.walk :as walk]
+         '[cheshire.core :as json])
 
 (import '[java.net Socket]
         '[java.io PushbackInputStream])
@@ -29,7 +30,8 @@
    :verbose {:desc "Show raw nREPL messages instead of parsed output"}
    :version {:desc "Show brepl version"}
    :help {:desc "Show this help message"
-          :alias :?}})
+          :alias :?}
+   :hook {:desc "Output Claude Code hook-compatible JSON format"}})
 
 (defn print-help []
   (println "brepl - Fast Babashka nREPL client for one-shot code evaluation")
@@ -69,7 +71,7 @@
   (or cli-host (get-env-var "BREPL_HOST") "localhost"))
 
 (defn resolve-port [cli-port]
-  (or cli-port 
+  (or cli-port
       (read-nrepl-port)
       (when-let [env-port (get-env-var "BREPL_PORT")]
         (Integer/parseInt env-port))))
@@ -78,11 +80,11 @@
   (when (:help opts)
     (print-help)
     (System/exit 0))
-  
+
   (when (:version opts)
     (println (str "brepl " version))
     (System/exit 0))
-  
+
   (let [has-expr (contains? opts :e)
         has-file (contains? opts :f)
         has-message (contains? opts :m)
@@ -93,13 +95,13 @@
           (println)
           (print-help)
           (System/exit 1))
-      
+
       (= option-count 0)
       (do (println "Error: Must specify one of -e EXPR, -f FILE, or -m MESSAGE")
           (println)
           (print-help)
           (System/exit 1))
-      
+
       (and has-file (not (.exists (io/file (:f opts)))))
       (do (println "Error: File does not exist:" (:f opts))
           (System/exit 1)))))
@@ -110,11 +112,11 @@
 
 (defn convert-bytes-in-map [m]
   (walk/postwalk
-    (fn [x]
-      (if (bytes? x)
-        (String. x)
-        x))
-    m))
+   (fn [x]
+     (if (bytes? x)
+       (String. x)
+       x))
+   m))
 
 (defn send-eval-message [host port code opts]
   (let [socket (Socket. host port)
@@ -124,14 +126,14 @@
         msg {"op" "eval"
              "code" (str code)
              "id" msg-id}]
-    
+
     ;; Print client message in verbose mode
     (when (:verbose opts)
       (pp/pprint msg))
-    
+
     (bencode/write-bencode out msg)
     (.flush out)
-    
+
     ;; Collect all response messages until we get "done" status
     (loop [responses []]
       (let [response (bencode/read-bencode in)
@@ -147,10 +149,10 @@
           (do
             (.close socket)
             (if (:verbose opts)
-              responses  ; Return empty since we already printed
+              responses ; Return empty since we already printed
               (conj responses response)))
           (recur (if (:verbose opts)
-                   responses  ; Don't accumulate in verbose mode
+                   responses ; Don't accumulate in verbose mode
                    (conj responses response))))))))
 
 (defn process-eval-responses [responses]
@@ -165,64 +167,123 @@
                 (get resp "err") (update :err conj (bytes->str (get resp "err")))
                 (get resp "value") (update :values conj (bytes->str (get resp "value")))
                 (get resp "ex") (assoc :ex (bytes->str (get resp "ex")))
-                (get resp "status") (update :status into 
-                                            (map bytes->str 
+                (get resp "status") (update :status into
+                                            (map bytes->str
                                                  (if (coll? (get resp "status"))
                                                    (get resp "status")
                                                    [(get resp "status")])))))
             combined
             responses)))
 
+(defn format-hook-response [processed has-error?]
+  (if has-error?
+    ;; Format error response with detailed information
+    (let [;; Build comprehensive error details
+          error-parts (cond-> []
+                        ;; Include exception info
+                        (:ex processed)
+                        (conj (str "Exception: " (:ex processed)))
+
+                        ;; Include stderr output
+                        (seq (:err processed))
+                        (concat (map #(str "Error: " %) (:err processed))))
+
+          ;; Include stdout if no other error info
+          error-parts (if (and (empty? error-parts) (seq (:out processed)))
+                        (concat error-parts (map #(str "Output: " %) (:out processed)))
+                        error-parts)
+
+          ;; Create main error message
+          error-msg (if (seq error-parts)
+                      (str/join " | " error-parts)
+                      "Evaluation error occurred")
+
+          ;; Build detailed reason with all available info
+          reason-parts (cond-> []
+                         (:ex processed)
+                         (conj (:ex processed))
+
+                         (seq (:err processed))
+                         (concat (:err processed))
+
+                         (seq (:out processed))
+                         (concat (:out processed)))
+
+          reason-msg (if (seq reason-parts)
+                       (str "Code evaluation failed:\n" (str/join "\n" reason-parts))
+                       "Code contains errors that must be fixed")]
+
+      {:continue false
+       :stopReason error-msg
+       :suppressOutput true
+       :decision "block"
+       :reason reason-msg})
+
+    ;; Success response
+    {:continue true
+     :suppressOutput true}))
+
 (defn eval-expression [host port code opts]
   (try
     (let [responses (send-eval-message host port code opts)]
-      
+
       ;; Process responses to check for errors even in verbose mode
       (let [processed (process-eval-responses responses)
             has-error? (or (:ex processed)
                            (some #{"eval-error"} (flatten (:status processed))))]
-        
-        ;; If verbose mode, responses were already printed
-        (if (:verbose opts)
-          has-error?  ; Just return error status
-          
-          ;; Otherwise print output normally
+
+        ;; If hook mode, return processed data
+        (if (:hook opts)
+          {:processed processed
+           :has-error? has-error?}
+
+          ;; Otherwise handle output normally
           (do
-            ;; Print stdout output
-            (doseq [out (:out processed)]
-              (print out))
-            
-            ;; Print stderr output to stderr
-            (doseq [err (:err processed)]
-              (binding [*out* *err*]
-                (print err)
-                (flush)))
-            
-            ;; Print evaluation results
-            (doseq [val (:values processed)]
-              (println val))
-            
-            ;; Handle exceptions
-            (when (:ex processed)
-              (binding [*out* *err*]
-                (println "Exception:" (:ex processed))))
-            
-            ;; Handle empty response
-            (when (and (empty? (:values processed))
-                       (empty? (:out processed))
-                       (empty? (:err processed))
-                       (not (:ex processed)))
-              (when (some #{"eval-error"} (flatten (:status processed)))
-                (binding [*out* *err*]
-                  (println "Evaluation error occurred"))))
-            
-            ;; Return error status
-            has-error?))))
-    
+            ;; If verbose mode, responses were already printed
+            (if (:verbose opts)
+              has-error? ; Just return error status
+
+              ;; Otherwise print output normally
+              (do
+                ;; Print stdout output
+                (doseq [out (:out processed)]
+                  (print out))
+
+                ;; Print stderr output to stderr
+                (doseq [err (:err processed)]
+                  (binding [*out* *err*]
+                    (print err)
+                    (flush)))
+
+                ;; Print evaluation results
+                (doseq [val (:values processed)]
+                  (println val))
+
+                ;; Handle exceptions
+                (when (:ex processed)
+                  (binding [*out* *err*]
+                    (println "Exception:" (:ex processed))))
+
+                ;; Handle empty response
+                (when (and (empty? (:values processed))
+                           (empty? (:out processed))
+                           (empty? (:err processed))
+                           (not (:ex processed)))
+                  (when (some #{"eval-error"} (flatten (:status processed)))
+                    (binding [*out* *err*]
+                      (println "Evaluation error occurred"))))
+
+                ;; Return error status
+                has-error?))))))
+
     (catch Exception e
-      (println "Error connecting to nREPL server at" (str host ":" port))
-      (println (.getMessage e))
-      (System/exit 1))))
+      (if (:hook opts)
+        {:processed {:ex (str "Connection error: " (.getMessage e))}
+         :has-error? true}
+        (do
+          (println "Error connecting to nREPL server at" (str host ":" port))
+          (println (.getMessage e))
+          (System/exit 1))))))
 
 (defn load-file [host port file-path opts]
   (let [code (slurp file-path)]
@@ -238,14 +299,14 @@
           msg-with-id (if (get msg "id")
                         msg
                         (assoc msg "id" (str (System/currentTimeMillis))))]
-      
+
       ;; Print client message in verbose mode
       (when (:verbose opts)
         (pp/pprint msg-with-id))
-      
+
       (bencode/write-bencode out msg-with-id)
       (.flush out)
-      
+
       ;; Collect all response messages until we get "done" status or no status
       (loop [responses []
              timeout-count 0]
@@ -264,22 +325,22 @@
             (do
               (.close socket)
               (if (:verbose opts)
-                responses  ; Return empty since we already printed
+                responses ; Return empty since we already printed
                 (conj responses response)))
-            
+
             ;; For operations that don't return "done", stop after reasonable response count
             (> timeout-count 10)
             (do
               (.close socket)
               responses)
-            
+
             ;; Otherwise keep reading
             :else
             (recur (if (:verbose opts)
-                     responses  ; Don't accumulate in verbose mode
+                     responses ; Don't accumulate in verbose mode
                      (conj responses response))
                    (inc timeout-count))))))
-    
+
     (catch Exception e
       (println "Error sending message to nREPL server at" (str host ":" port))
       (println (.getMessage e))
@@ -312,20 +373,29 @@
         opts (if expr (assoc opts :e expr) opts)
         host (resolve-host (:h opts))
         port (resolve-port (:p opts))]
-    
+
     (validate-args opts)
-    
+
     (when-not port
       (println "Error: No port specified, no .nrepl-port file found, and BREPL_PORT not set")
       (System/exit 1))
-    
-    (let [has-error? (cond
-                       (:e opts) (eval-expression host port (:e opts) opts)
-                       (:f opts) (load-file host port (:f opts) opts)
-                       (:m opts) (do (process-raw-message host port (:m opts) opts)
-                                     false))]  ; raw messages don't track errors
-      (when has-error?
-        (System/exit 1)))))
+
+    (let [result (cond
+                   (:e opts) (eval-expression host port (:e opts) opts)
+                   (:f opts) (load-file host port (:f opts) opts)
+                   (:m opts) (do (process-raw-message host port (:m opts) opts)
+                                 false))] ; raw messages don't track errors
+
+      ;; Handle hook mode
+      (if (:hook opts)
+        (let [{:keys [processed has-error?]} result
+              hook-response (format-hook-response processed has-error?)]
+          (println (json/generate-string hook-response))
+          (System/exit (if has-error? 2 0)))
+
+        ;; Regular mode - for backward compatibility, use exit code 2 for eval errors
+        (when result
+          (System/exit 2))))))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (apply -main *command-line-args*))

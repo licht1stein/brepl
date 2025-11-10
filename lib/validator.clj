@@ -10,20 +10,26 @@
         line (:line error)
         col (:column error)]
     (cond
+      ;; Unmatched delimiter means extra closing bracket
+      (clojure.string/includes? msg "Unmatched delimiter")
+      msg
+
       (and expected line col)
       (str msg " at line " line ", column " col)
 
       expected
-      (str msg " (expected: " expected ")")
+      (str msg)
 
       :else msg)))
 
 (defn delimiter-error?
   "Parse content with edamame and return error info if delimiters are invalid.
-   Returns nil if valid, or a map with error details if invalid."
+   Returns nil if valid, or a map with error details if invalid.
+   Parses ALL forms to catch both missing and extra delimiters."
   [content]
   (try
-    (edamame/parse-string content)
+    ;; Parse all forms, not just the first one
+    (edamame/parse-string-all content)
     nil
     (catch Exception e
       (let [msg (ex-message e)
@@ -37,7 +43,8 @@
          :opened-loc (:edamame/opened-delimiter-loc data)}))))
 
 (defn auto-fix-brackets
-  "Attempt to auto-fix unclosed bracket errors recursively.
+  "Attempt to auto-fix bracket errors recursively.
+   Handles both missing brackets (append) and extra brackets (remove from end).
    Returns fixed content if successful, or nil if unable to fix."
   [content]
   (loop [current content
@@ -52,8 +59,15 @@
         ;; Give up after 10 attempts to prevent infinite loops
         nil
 
-        (:expected-delimiter error)
-        ;; Try appending the expected delimiter and recurse
+        ;; Unmatched delimiter - try removing from end
+        (and (clojure.string/includes? (:message error) "Unmatched delimiter")
+             (> (count current) 0))
+        (recur (subs current 0 (dec (count current)))
+               (inc attempts))
+
+        ;; Missing delimiter - append expected
+        (and (:expected-delimiter error)
+             (not= "" (:expected-delimiter error)))
         (recur (str current (:expected-delimiter error))
                (inc attempts))
 

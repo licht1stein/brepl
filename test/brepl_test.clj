@@ -120,7 +120,8 @@
       (testing "Undefined symbol"
         (let [result (run-brepl "-p" port "-e" "undefined-var")]
           (is (= 2 (:exit result)))
-          (is (str/includes? (:err result) "Could not resolve symbol"))))
+          (is (or (str/includes? (:err result) "Could not resolve symbol")
+                  (str/includes? (:err result) "Unable to resolve symbol")))))
 
       (testing "Syntax error"
         (let [result (run-brepl "-p" port "-e" "(defn bad [)")]

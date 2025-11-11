@@ -5,6 +5,8 @@
 
 A fast, lightweight nREPL client for one-shot interactions with any nREPL server.
 
+**v2.0.0 Breaking Change:** Single-file installation no longer supported. Hook features require `lib/` directory. Use bbin, Nix, or clone the repository for full functionality.
+
 ## Quick Start
 
 1. **Start a Babashka nREPL server** in your project:
@@ -29,6 +31,7 @@ You need to specify the port with `-p 1667` since Babashka doesn't create a `.nr
 - 📁 **File loading** - Load and execute entire Clojure files
 - 🔍 **Auto-discovery** - Automatically detects `.nrepl-port` files
 - 📂 **Project-aware** (v1.3.0) - Finds `.nrepl-port` by walking up from file's directory
+- 🤖 **AI-assisted development** (v2.0.0) - Lightweight hooks for AI agents with auto-fix and validation
 - ⚙️ **Flexible configuration** - Support for environment variables and CLI arguments
 - 🐛 **Proper error handling** - Shows exceptions and stack traces
 - 📊 **Verbose mode** - Debug nREPL communication with `--verbose`
@@ -38,24 +41,13 @@ You need to specify the port with `-p 1667` since Babashka doesn't create a `.nr
 
 ## Installation
 
-### Option 1: Install via bbin
+### Option 1: Install via bbin (recommended)
 
 ```bash
 bbin install io.github.licht1stein/brepl
 ```
 
-### Option 2: Download with curl
-
-```bash
-# Download latest release (v1.3.1)
-curl -sSL https://raw.githubusercontent.com/licht1stein/brepl/v1.3.1/brepl -o brepl
-chmod +x brepl
-# Move to a directory on your PATH
-```
-
-### Option 3: Install with Nix
-
-Add to your project's `shell.nix`:
+### Option 2: Install with Nix
 
 ```nix
 { pkgs ? import <nixpkgs> {} }:
@@ -64,8 +56,8 @@ let
   brepl = pkgs.callPackage (pkgs.fetchFromGitHub {
     owner = "licht1stein";
     repo = "brepl";
-    rev = "v1.3.1";
-    hash = "sha256-ZPydBe1Wszy2URmposABdnpQiniG0ZMABRNW1UIPFgQ=";
+    rev = "v2.0.0";
+    hash = "";  # Run nix-shell once to get the correct hash
   } + "/package.nix") {};
 in
 pkgs.mkShell {
@@ -75,20 +67,15 @@ pkgs.mkShell {
 
 Then run `nix-shell` to enter a shell with brepl available.
 
-### Option 4: Manual Installation
+### Option 3: Manual Installation
 
-1. Clone or download the repository
-2. Make the script executable:
-   ```bash
-   chmod +x brepl
-   ```
-3. Place it somewhere on your PATH:
-   ```bash
-   # Copy to a directory on your PATH
-   cp brepl ~/.local/bin/
-   # Or create a symlink
-   ln -s /path/to/brepl/brepl ~/.local/bin/brepl
-   ```
+```bash
+git clone https://github.com/licht1stein/brepl.git
+cd brepl
+
+# Add to PATH
+ln -s $(pwd)/brepl ~/.local/bin/brepl
+```
 
 ## Usage
 
@@ -105,7 +92,16 @@ Then run `nix-shell` to enter a shell with brepl available.
       --verbose              Show raw nREPL messages instead of parsed output
       --version              Show brepl version
   -?, --help                 Show help message
-      --hook                 Output Claude Code hook-compatible JSON format
+```
+
+### Hook Subcommands
+
+```bash
+brepl hook install              # Install hooks to .claude/settings.local.json
+brepl hook uninstall            # Remove hooks
+brepl hook validate <file> <content>  # Pre-edit validation with auto-fix
+brepl hook eval <file>          # Post-edit evaluation
+brepl hook session-end <id>     # Cleanup session backups
 ```
 
 ### Basic Usage
@@ -286,75 +282,140 @@ For a complete list of standard nREPL operations, see the [nREPL documentation](
 brepl -m '{"op" "describe"}' --verbose
 ```
 
-### Using as a Claude Code Hook
+### AI-Assisted Development
 
-The `--hook` flag enables brepl to output JSON in a format compatible with Claude Code hooks. This allows automatic validation of Clojure files during AI-assisted development.
+brepl provides lightweight hooks for REPL-driven development with AI coding agents.
 
-#### Setting up Claude Code Hook
+**Two Approaches to AI-Assisted Clojure:**
 
-Add this to your Claude Code settings (`~/.claude/settings.json`):
+1. **Protocol servers + external binaries** - Install parinfer-rust binary, run MCP servers, configure protocol bridges
+2. **brepl hooks** - Pure Clojure using Babashka's built-in edamame parser
 
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "(?i)edit|write|replace",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "jq -r 'select(.tool_input.file_path // .tool_input.path) | (.tool_input.file_path // .tool_input.path) | select(test(\"\\\\.clj[sc]?$\"))' | while read f; do brepl --hook -f \"$f\"; done"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+brepl chooses approach #2: zero external dependencies, direct integration with your REPL, no additional processes. If you're already running Babashka and nREPL, you have everything needed.
 
-This hook will:
-1. Intercept file edits made by Claude
-2. Filter for Clojure files (`.clj`, `.cljs`, `.cljc`)
-3. Automatically load each edited file into your running REPL
-4. Stop Claude if evaluation errors occur
+#### Quick Setup
 
-#### Hook Output Format
-
-When using `--hook`, brepl outputs JSON instead of plain text:
-
-**Success:**
-```json
-{"continue": true, "suppressOutput": true}
-```
-
-**Error:**
-```json
-{
-  "continue": false,
-  "stopReason": "Exception: class java.lang.ArithmeticException | Error: Divide by zero",
-  "suppressOutput": true,
-  "decision": "block",
-  "reason": "Code evaluation failed:\njava.lang.ArithmeticException: Divide by zero at line 1"
-}
-```
-
-#### Example Usage
+Install hooks in your project:
 
 ```bash
-# Normal mode - human-readable output
-brepl -f my-code.clj
-# => Function loaded successfully
-
-# Hook mode - JSON output for Claude
-brepl --hook -f my-code.clj
-# => {"continue": true, "suppressOutput": true}
-
-# Hook mode with error
-brepl --hook -e '(/ 1 0)'
-# => {"continue": false, "stopReason": "Exception: ...", ...}
+brepl hook install
 ```
 
-The hook ensures that Claude stops and alerts you when code changes introduce errors, maintaining a working REPL state throughout your development session.
+This creates `.claude/settings.local.json` with validation and evaluation hooks that:
+- **Pre-edit**: Validate syntax and auto-fix bracket errors before file writes
+- **Post-edit**: Evaluate changed files via your existing nREPL connection
+- **Session cleanup**: Remove temporary backups when done
+
+#### Hook Commands
+
+**`brepl hook install`**
+Installs hooks to `.claude/settings.local.json` for the current project. Idempotent—safe to run multiple times.
+
+**`brepl hook validate <file> <content>`**
+Pre-edit syntax validation with automatic bracket correction. Recursively closes unclosed brackets and braces using the edamame parser. Returns corrected code or blocks with detailed error messages.
+
+```bash
+# Auto-fixes unclosed brackets
+brepl hook validate src/core.clj "(defn foo ["
+# => {"decision":"allow","correction":"(defn foo [])"}
+
+# Blocks unfixable syntax errors
+brepl hook validate src/core.clj "\"unclosed string"
+# => {"decision":"block","reason":"Syntax error..."}
+```
+
+**`brepl hook eval <file>`**
+Post-edit validation and optional nREPL evaluation. Validates syntax first, then evaluates via nREPL if available. Warnings don't block—development stays fluid while catching real errors.
+
+```bash
+# With nREPL running - evaluates and warns on errors
+brepl hook eval src/core.clj
+# => {"decision":"allow","warning":"Undefined symbol..."}
+
+# Without nREPL - validates syntax only
+brepl hook eval src/core.clj
+# => {"decision":"allow"}  # Graceful degradation
+```
+
+**`brepl hook uninstall`**
+Removes hooks from `.claude/settings.local.json` cleanly.
+
+**`brepl hook session-end <session-id>`**
+Cleanup command (called automatically by Claude Code) that removes session backup files.
+
+#### How It Works
+
+When active, brepl hooks run automatically during AI-assisted edits:
+
+1. **Before edit**: Agent proposes code changes
+2. **Validate**: brepl checks syntax, auto-fixes brackets if needed
+3. **Write**: File is written with validated/corrected code
+4. **Evaluate**: brepl loads file into your running REPL (if available)
+5. **Feedback**: Agent sees warnings but continues unless syntax is invalid
+
+This keeps your REPL state synchronized with file changes and catches errors early, without interrupting flow for recoverable issues like undefined symbols during incremental development.
+
+#### Backup & Recovery
+
+brepl automatically creates session-specific backups before validating edits. If syntax errors are detected post-write, the original file is restored from backup. Backups are stored in `/tmp/brepl-hooks-<session-id>/` and cleaned up automatically.
+
+#### Project-Aware Integration
+
+Hooks work with brepl's project-aware port discovery (v1.3.0+). When evaluating files, brepl walks up from the file's directory to find the correct `.nrepl-port`, so multi-project workflows just work:
+
+```bash
+# Directory structure:
+# ~/projects/
+#   ├── service-a/
+#   │   ├── .nrepl-port (7000)
+#   │   └── src/api.clj
+#   └── service-b/
+#       ├── .nrepl-port (8000)
+#       └── src/handler.clj
+
+# Each file evaluates against its own REPL
+brepl hook eval ~/projects/service-a/src/api.clj      # port 7000
+brepl hook eval ~/projects/service-b/src/handler.clj  # port 8000
+```
+
+#### Design Philosophy: Minimal Dependencies
+
+brepl takes a different approach to AI-assisted Clojure development. While some solutions require installing external binaries for bracket repair (parinfer-rust) or running protocol servers (MCP), brepl uses only what's already available in Babashka.
+
+**Zero External Dependencies:**
+- ✅ No native binaries to install (parinfer-rust, clojure-lsp, etc.)
+- ✅ No additional servers or protocol implementations
+- ✅ Pure Clojure solution using edamame (built into Babashka)
+- ✅ Works anywhere Babashka runs—no platform-specific builds
+
+**Proven Effectiveness:**
+Testing shows 94.9% agreement with industry-standard tools for bracket correction. The 5% difference affects edge cases (anonymous function reader macros) that rarely occur in practice and degrade gracefully with clear error messages.
+
+**Integration over Installation:**
+- ✅ Uses your running nREPL connection (no separate context)
+- ✅ Works with any nREPL server (Babashka, Clojure, ClojureScript)
+- ✅ Minimal overhead (fast Babashka startup)
+- ✅ Graceful degradation (works without nREPL for syntax checking)
+- ✅ Project-aware (handles multiple REPLs automatically)
+
+**Trade-off:**
+If you need 100% compatibility with parinfer-rust or full MCP protocol support, other tools may be better fits. brepl prioritizes zero-dependency installation and tight REPL integration for the 95% of cases that "just work."
+
+Perfect for developers who want AI assistance without expanding their toolchain.
+
+#### Implementation Details
+
+See `BRACKET_AUTO_FIX_ANALYSIS.md` for detailed comparison with parinfer-rust showing **94.9% agreement** across 39 test cases. Both approaches:
+- Fix extra closing brackets by removing from end
+- Fix missing closing brackets by appending
+- Handle nested structures with multiple errors
+- Pragmatically fix "mismatched" delimiters as typos: `[1 2 3)` → `[1 2 3]`
+- Give up on genuinely complex errors (deeply nested mismatches, strings)
+
+**Known Limitations:**
+- Can't fix anonymous function reader macros: `#(+ % 1` (edamame parser limitation)
+- Multi-form with complex errors may fix only first form
+- These edge cases occur rarely and degrade gracefully with clear error messages
 
 ## Troubleshooting
 

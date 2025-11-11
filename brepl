@@ -1,6 +1,6 @@
 #!/usr/bin/env bb
 
-(def version "1.3.1")
+(def version "2.0.0")
 
 (require '[babashka.cli :as cli]
          '[clojure.java.io :as io]
@@ -9,6 +9,9 @@
          '[clojure.pprint :as pp]
          '[clojure.walk :as walk]
          '[cheshire.core :as json])
+
+;; Load hook modules (loaded conditionally when needed)
+(def hook-modules-loaded (atom false))
 
 (import '[java.net Socket]
         '[java.io PushbackInputStream])
@@ -417,5 +420,159 @@
         (when result
           (System/exit 2))))))
 
+;; Lazy load hook modules
+(defn ensure-hook-modules-loaded []
+  (when (not @hook-modules-loaded)
+    (let [script-dir (-> (System/getProperty "babashka.file")
+                         (clojure.java.io/file)
+                         (.getParentFile)
+                         (.getAbsolutePath))]
+      (load-file (str script-dir "/lib/hook_utils.clj"))
+      (require '[brepl.lib.hook-utils :as hook-utils])
+      (load-file (str script-dir "/lib/validator.clj"))
+      (require '[brepl.lib.validator :as validator])
+      (load-file (str script-dir "/lib/backup.clj"))
+      (require '[brepl.lib.backup :as backup])
+      (load-file (str script-dir "/lib/installer.clj"))
+      (require '[brepl.lib.installer :as installer]))
+    (reset! hook-modules-loaded true)))
+
+;; Hook subcommand handlers
+(defn handle-hook-subcommand [subcommand args]
+  (case subcommand
+    "validate"
+    (if (< (count args) 2)
+      (do (println (json/generate-string {:continue true :decision "block" :stopReason "invalid_arguments" :reason "Usage: brepl hook validate <file-path> <new-content>"}))
+          (System/exit 1))
+      (do (ensure-hook-modules-loaded)
+          (let [file-path (first args)
+                content (second args)
+                clojure-file? (ns-resolve (the-ns 'brepl.lib.validator) 'clojure-file?)
+                delimiter-error? (ns-resolve (the-ns 'brepl.lib.validator) 'delimiter-error?)]
+            (if-not (clojure-file? file-path)
+              (do (println (json/generate-string {:continue true :decision "allow" :suppressOutput true}))
+                  (System/exit 0)))
+            (let [error (delimiter-error? content)
+                  format-msg (ns-resolve (the-ns 'brepl.lib.validator) 'format-error-message)
+                  auto-fix (ns-resolve (the-ns 'brepl.lib.validator) 'auto-fix-brackets)
+                  create-backup (ns-resolve (the-ns 'brepl.lib.backup) 'create-backup)
+                  session-id (System/getenv "SESSION_ID")]
+              (if error
+                (let [fixed (auto-fix content)]
+                  (if fixed
+                    (do (when (and session-id create-backup)
+                          (create-backup file-path session-id))
+                        (println (json/generate-string {:continue true :decision "allow" :suppressOutput true :correction fixed}))
+                        (System/exit 0))
+                    (do (println (json/generate-string {:continue true :decision "block" :stopReason "syntax_error" :reason (str "Syntax error in " file-path ": " (format-msg error file-path))}))
+                        (System/exit 1))))
+                (do (when (and session-id create-backup)
+                      (create-backup file-path session-id))
+                    (println (json/generate-string {:continue true :decision "allow" :suppressOutput true}))
+                    (System/exit 0)))))))
+
+    "eval"
+    (if (empty? args)
+      (do (println (json/generate-string {:continue true :decision "block" :stopReason "invalid_arguments" :reason "Usage: brepl hook eval <file-path>"}))
+          (System/exit 1))
+      (do (ensure-hook-modules-loaded)
+          (let [file-path (first args)
+                delimiter-error? (ns-resolve (the-ns 'brepl.lib.validator) 'delimiter-error?)
+                restore-backup (ns-resolve (the-ns 'brepl.lib.backup) 'restore-backup)
+                session-id (System/getenv "SESSION_ID")
+                host (resolve-host nil)
+                port (resolve-port nil file-path)]
+            ;; Load file and validate syntax first
+            (if (not (.exists (clojure.java.io/file file-path)))
+              (do (println (json/generate-string {:continue true :decision "block" :stopReason "file_not_found" :reason (str "File not found: " file-path)}))
+                  (System/exit 1))
+              ;; File exists, validate syntax
+              (let [file-content (slurp file-path)
+                    error (delimiter-error? file-content)]
+                (if error
+                  ;; Syntax error - restore backup
+                  (do (when (and session-id restore-backup)
+                        (restore-backup session-id file-path))
+                      (println (json/generate-string {:continue true :decision "block" :stopReason "syntax_error" :reason (str "Syntax error in " file-path ": " (:message error))}))
+                      (System/exit 1))
+                  ;; Valid syntax - try nREPL evaluation if port available
+                  (if port
+                    ;; Evaluate via nREPL
+                    (let [result (eval-file host port file-path {:hook true})]
+                      (if (:has-error? result)
+                        ;; Eval error - warn but allow by default
+                        (let [ex-msg (get-in result [:processed :ex] "Evaluation error")]
+                          (println (json/generate-string {:continue true :decision "allow" :suppressOutput true :warning (str "Evaluation warning in " file-path ": " ex-msg)}))
+                          (System/exit 0))
+                        ;; Success
+                        (do (println (json/generate-string {:continue true :decision "allow" :suppressOutput true}))
+                            (System/exit 0))))
+                    ;; No nREPL port - gracefully degrade, just allow
+                    (do (println (json/generate-string {:continue true :decision "allow" :suppressOutput true}))
+                        (System/exit 0)))))))))
+
+    "install"
+    (do (ensure-hook-modules-loaded)
+        (let [opts (cli/parse-opts args {:spec {:strict-eval {:coerce :boolean}
+                                                 :parinfer {:coerce :boolean}}})
+              install-result (ns-resolve (the-ns 'brepl.lib.installer) 'install-hooks)
+              check-result (ns-resolve (the-ns 'brepl.lib.installer) 'check-status)]
+          (install-result opts)
+          (let [status (check-result)]
+            (println "Installing Claude Code hooks...")
+            (println "Hooks installed successfully.")
+            (println)
+            (when (:installed status)
+              (println "Settings file:" (:settings-path status)))
+            (System/exit 0))))
+
+    "uninstall"
+    (do (ensure-hook-modules-loaded)
+        (let [uninstall-result (ns-resolve (the-ns 'brepl.lib.installer) 'uninstall-hooks)]
+          (uninstall-result)
+          (println "Removing Claude Code hooks...")
+          (println "Hooks uninstalled successfully.")
+          (System/exit 0)))
+
+    "session-end"
+    (if (empty? args)
+      (do (println "Error: session-id required")
+          (System/exit 1))
+      (do (ensure-hook-modules-loaded)
+          (let [session-id (first args)
+                cleanup (ns-resolve (the-ns 'brepl.lib.backup) 'cleanup-session)]
+            (cleanup session-id)
+            (System/exit 0))))
+
+    ;; Help for hook subcommands
+    (do
+      (println "brepl hook - Claude Code integration commands")
+      (println)
+      (println "USAGE:")
+      (println "    brepl hook validate <file> <content>")
+      (println "    brepl hook eval <file>")
+      (println "    brepl hook install [--strict-eval] [--parinfer]")
+      (println "    brepl hook uninstall")
+      (println "    brepl hook session-end <session-id>")
+      (println)
+      (println "SUBCOMMANDS:")
+      (println "    validate       Validate Clojure file syntax before edit")
+      (println "    eval           Evaluate file and check for runtime errors")
+      (println "    install        Install hooks in .claude/settings.local.json")
+      (println "    uninstall      Remove hooks from .claude/settings.local.json")
+      (println "    session-end    Clean up session backup files")
+      (System/exit (if (and subcommand (not (contains? #{"validate" "eval" "install" "uninstall" "session-end"} subcommand))) 1 0)))))
+
+(defn -main-hook [args]
+  "Handle brepl hook subcommands"
+  (if (empty? args)
+    (handle-hook-subcommand nil nil)
+    (let [subcommand (first args)
+          remaining-args (rest args)]
+      (handle-hook-subcommand subcommand remaining-args))))
+
 (when (= *file* (System/getProperty "babashka.file"))
-  (apply -main *command-line-args*))
+  (if (and (> (count *command-line-args*) 0)
+           (= "hook" (first *command-line-args*)))
+    (-main-hook (rest *command-line-args*))
+    (apply -main *command-line-args*)))

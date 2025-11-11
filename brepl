@@ -1,6 +1,6 @@
 #!/usr/bin/env bb
 
-(def version "1.4.0")
+(def version "2.0.0")
 
 (require '[babashka.cli :as cli]
          '[clojure.java.io :as io]

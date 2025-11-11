@@ -29,7 +29,7 @@ You need to specify the port with `-p 1667` since Babashka doesn't create a `.nr
 - 📁 **File loading** - Load and execute entire Clojure files
 - 🔍 **Auto-discovery** - Automatically detects `.nrepl-port` files
 - 📂 **Project-aware** (v1.3.0) - Finds `.nrepl-port` by walking up from file's directory
-- 🤖 **AI-assisted development** (v1.4.0) - Lightweight hooks for AI agents with auto-fix and validation
+- 🤖 **AI-assisted development** (v2.0.0) - Lightweight hooks for AI agents with auto-fix and validation
 - ⚙️ **Flexible configuration** - Support for environment variables and CLI arguments
 - 🐛 **Proper error handling** - Shows exceptions and stack traces
 - 📊 **Verbose mode** - Debug nREPL communication with `--verbose`
@@ -54,7 +54,7 @@ let
   brepl = pkgs.callPackage (pkgs.fetchFromGitHub {
     owner = "licht1stein";
     repo = "brepl";
-    rev = "v1.4.0";
+    rev = "v2.0.0";
     hash = "";  # Run nix-shell once to get the correct hash
   } + "/package.nix") {};
 in

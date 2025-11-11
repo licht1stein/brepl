@@ -57,7 +57,7 @@ let
     owner = "licht1stein";
     repo = "brepl";
     rev = "v2.0.0";
-    hash = "";  # Run nix-shell once to get the correct hash
+    hash = "sha256-7uzCxODIFbqBARnCsXOQkUHHFUWowewALjktdQhJibo=";
   } + "/package.nix") {};
 in
 pkgs.mkShell {

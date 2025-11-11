@@ -5,6 +5,8 @@
 
 A fast, lightweight nREPL client for one-shot interactions with any nREPL server.
 
+**v2.0.0 Breaking Change:** Single-file installation no longer supported. Hook features require `lib/` directory. Use bbin, Nix, or clone the repository for full functionality.
+
 ## Quick Start
 
 1. **Start a Babashka nREPL server** in your project:
@@ -282,7 +284,14 @@ brepl -m '{"op" "describe"}' --verbose
 
 ### AI-Assisted Development
 
-brepl provides lightweight hooks for REPL-driven development with AI coding agents. Unlike heavier protocol-based solutions, brepl hooks integrate seamlessly with your existing workflow—no additional servers or complex configurations required.
+brepl provides lightweight hooks for REPL-driven development with AI coding agents.
+
+**Two Approaches to AI-Assisted Clojure:**
+
+1. **Protocol servers + external binaries** - Install parinfer-rust binary, run MCP servers, configure protocol bridges
+2. **brepl hooks** - Pure Clojure using Babashka's built-in edamame parser
+
+brepl chooses approach #2: zero external dependencies, direct integration with your REPL, no additional processes. If you're already running Babashka and nREPL, you have everything needed.
 
 #### Quick Setup
 
@@ -369,48 +378,44 @@ brepl hook eval ~/projects/service-a/src/api.clj      # port 7000
 brepl hook eval ~/projects/service-b/src/handler.clj  # port 8000
 ```
 
-#### Why Lightweight Hooks?
+#### Design Philosophy: Minimal Dependencies
 
-Traditional approaches to AI-assisted Clojure development often require:
-- Additional language servers or protocol implementations
-- Complex editor integrations or middleware
-- Separate evaluation contexts from your development REPL
+brepl takes a different approach to AI-assisted Clojure development. While some solutions require installing external binaries for bracket repair (parinfer-rust) or running protocol servers (MCP), brepl uses only what's already available in Babashka.
 
-brepl hooks integrate with your existing setup:
-- ✅ Uses your running nREPL connection (no additional servers)
+**Zero External Dependencies:**
+- ✅ No native binaries to install (parinfer-rust, clojure-lsp, etc.)
+- ✅ No additional servers or protocol implementations
+- ✅ Pure Clojure solution using edamame (built into Babashka)
+- ✅ Works anywhere Babashka runs—no platform-specific builds
+
+**Proven Effectiveness:**
+Testing shows 94.9% agreement with industry-standard tools for bracket correction. The 5% difference affects edge cases (anonymous function reader macros) that rarely occur in practice and degrade gracefully with clear error messages.
+
+**Integration over Installation:**
+- ✅ Uses your running nREPL connection (no separate context)
 - ✅ Works with any nREPL server (Babashka, Clojure, ClojureScript)
-- ✅ Minimal overhead (fast Babashka startup, simple validation)
+- ✅ Minimal overhead (fast Babashka startup)
 - ✅ Graceful degradation (works without nREPL for syntax checking)
 - ✅ Project-aware (handles multiple REPLs automatically)
 
-Perfect for REPL-driven development where you want AI assistance without changing how you work.
+**Trade-off:**
+If you need 100% compatibility with parinfer-rust or full MCP protocol support, other tools may be better fits. brepl prioritizes zero-dependency installation and tight REPL integration for the 95% of cases that "just work."
 
-#### Auto-Fix Implementation
+Perfect for developers who want AI assistance without expanding their toolchain.
 
-brepl uses edamame (Babashka's built-in parser) for bracket auto-correction instead of external tools like parinfer-rust. This design choice prioritizes:
+#### Implementation Details
 
-**Zero Installation Friction:**
-- ✅ No binary dependencies to install
-- ✅ Works anywhere Babashka runs (Linux, macOS, Windows)
-- ✅ No version compatibility issues
-- ✅ Pure Clojure solution using libraries already available
-
-**Proven Effectiveness:**
-Comprehensive testing against parinfer-rust shows **94.9% agreement** across 39 test cases (see `BRACKET_AUTO_FIX_ANALYSIS.md` for detailed comparison). Both tools:
+See `BRACKET_AUTO_FIX_ANALYSIS.md` for detailed comparison with parinfer-rust showing **94.9% agreement** across 39 test cases. Both approaches:
 - Fix extra closing brackets by removing from end
 - Fix missing closing brackets by appending
 - Handle nested structures with multiple errors
 - Pragmatically fix "mismatched" delimiters as typos: `[1 2 3)` → `[1 2 3]`
-- Correctly give up on genuinely complex errors (deeply nested mismatches)
+- Give up on genuinely complex errors (deeply nested mismatches, strings)
 
-**Trade-offs:**
-- ⚠️ Can't fix anonymous function reader macros: `#(+ % 1` (rare edge case)
-- ⚠️ Multi-form with complex errors may fix only first form
-- ✅ **Benefit:** Zero dependencies means brepl "just works" without setup
-
-The 5% difference from parinfer affects edge cases that rarely occur in practice. When auto-fix can't help, the AI agent receives a clear error message and fixes it manually—which works fine.
-
-For most AI-assisted development, edamame-based auto-fix provides the same quality as parinfer with dramatically simpler installation and zero external dependencies.
+**Known Limitations:**
+- Can't fix anonymous function reader macros: `#(+ % 1` (edamame parser limitation)
+- Multi-form with complex errors may fix only first form
+- These edge cases occur rarely and degrade gracefully with clear error messages
 
 ## Troubleshooting
 

@@ -2,11 +2,12 @@
 , stdenv
 , makeWrapper
 , babashka
+, parinfer-rust
 }:
 
 stdenv.mkDerivation rec {
   pname = "brepl";
-  version = "2.0.0";
+  version = "2.0.1";
 
   src = ./.;
 
@@ -23,7 +24,7 @@ stdenv.mkDerivation rec {
     chmod +x $out/share/brepl/brepl
 
     makeWrapper $out/share/brepl/brepl $out/bin/brepl \
-      --prefix PATH : ${lib.makeBinPath [ babashka ]}
+      --prefix PATH : ${lib.makeBinPath [ babashka parinfer-rust ]}
 
     runHook postInstall
   '';

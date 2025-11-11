@@ -1,20 +1,29 @@
 #!/usr/bin/env bb
+(ns brepl
+  (:require [babashka.cli :as cli]
+            [clojure.java.io :as io]
+            [babashka.fs :as fs]
+            [clojure.string :as str]
+            [bencode.core :as bencode]
+            [clojure.pprint :as pp]
+            [clojure.walk :as walk]
+            [cheshire.core :as json])
+  (:import [java.net Socket]
+           [java.io PushbackInputStream]))
 
-(def version "2.0.0")
+(def version "2.0.1")
 
-(require '[babashka.cli :as cli]
-         '[clojure.java.io :as io]
-         '[clojure.string :as str]
-         '[bencode.core :as bencode]
-         '[clojure.pprint :as pp]
-         '[clojure.walk :as walk]
-         '[cheshire.core :as json])
+;; Load lib files and require namespaces
+(let [script-dir (some-> (System/getProperty "babashka.file")
+                         io/file
+                         .getParentFile
+                         .getAbsolutePath)]
+  (doseq [lib ["hook_utils" "validator" "backup" "installer"]]
+    (load-file (str script-dir "/lib/" lib ".clj"))))
 
-;; Load hook modules (loaded conditionally when needed)
-(def hook-modules-loaded (atom false))
-
-(import '[java.net Socket]
-        '[java.io PushbackInputStream])
+(require '[brepl.lib.validator :as validator]
+         '[brepl.lib.backup :as backup]
+         '[brepl.lib.installer :as installer])
 
 (def cli-spec
   {:e {:desc "Expression to evaluate (everything after -e is treated as code)"
@@ -43,6 +52,7 @@
   (println "    brepl [OPTIONS] -e <expr>")
   (println "    brepl [OPTIONS] -f <file>")
   (println "    brepl [OPTIONS] -m <message>")
+  (println "    brepl hook <subcommand> [args]")
   (println)
   (println "OPTIONS:")
   (println (cli/format-opts {:spec cli-spec :order [:e :f :m :h :p :verbose :version :help]}))
@@ -70,24 +80,29 @@
         Integer/parseInt)))
 
 (defn find-nrepl-port-in-parents
-  "Search for .nrepl-port file starting from the given directory and walking up the directory tree.
+  "Search for .nrepl-port file starting from the given directory and walking up to CWD.
+  Stops at CWD to avoid searching outside the project.
   Returns the port number from the first .nrepl-port file found, or nil if none found."
   [start-dir]
-  (loop [dir (io/file start-dir)]
-    (when dir
-      (let [port-file (io/file dir ".nrepl-port")]
-        (if (.exists port-file)
-          (let [port (try
-                       (-> (slurp port-file)
-                           str/trim
-                           Integer/parseInt)
-                       (catch Exception e
-                         ;; If we can't parse the port file, continue searching
-                         nil))]
-            (if port
-              port
-              (recur (.getParentFile dir))))
-          (recur (.getParentFile dir)))))))
+  (let [cwd (fs/absolutize (fs/cwd))]
+    (loop [dir (fs/absolutize start-dir)]
+      (when dir
+        (let [port-file (fs/file dir ".nrepl-port")]
+          (if (fs/exists? port-file)
+            (let [port (try
+                         (-> (slurp port-file)
+                             str/trim
+                             Integer/parseInt)
+                         (catch Exception e
+                           ;; If we can't parse the port file, continue searching
+                           nil))]
+              (if port
+                port
+                (recur (fs/parent dir))))
+            ;; No port file, continue if we haven't reached CWD yet
+            (let [parent (fs/parent dir)]
+              (when (and parent (not (= dir cwd)))
+                (recur parent)))))))))
 
 (defn get-env-var [var-name]
   (System/getenv var-name))
@@ -105,8 +120,7 @@
    (or cli-port
        (if file-path
          ;; For -f option: search from file's directory upward
-         (let [file (io/file file-path)
-               parent-dir (.getParentFile file)]
+         (let [parent-dir (fs/parent (fs/absolutize file-path))]
            (when parent-dir
              (find-nrepl-port-in-parents parent-dir)))
          ;; For -e and -m options: use current directory
@@ -114,47 +128,32 @@
        (when-let [env-port (get-env-var "BREPL_PORT")]
          (Integer/parseInt env-port)))))
 
+(defn exit-with-help [msg]
+  (when msg (println msg) (println))
+  (print-help)
+  (System/exit 1))
+
 (defn validate-args [opts]
-  (when (:help opts)
-    (print-help)
-    (System/exit 0))
+  (when (:help opts) (print-help) (System/exit 0))
+  (when (:version opts) (println (str "brepl " version)) (System/exit 0))
 
-  (when (:version opts)
-    (println (str "brepl " version))
-    (System/exit 0))
-
-  (let [has-expr (contains? opts :e)
-        has-file (contains? opts :f)
-        has-message (contains? opts :m)
-        option-count (count (filter identity [has-expr has-file has-message]))]
+  (let [modes (select-keys opts [:e :f :m])
+        mode-count (count modes)]
     (cond
-      (> option-count 1)
-      (do (println "Error: Cannot specify multiple options (-e, -f, -m) together")
-          (println)
-          (print-help)
-          (System/exit 1))
-
-      (= option-count 0)
-      (do (println "Error: Must specify one of -e EXPR, -f FILE, or -m MESSAGE")
-          (println)
-          (print-help)
-          (System/exit 1))
-
-      (and has-file (not (.exists (io/file (:f opts)))))
+      (> mode-count 1) (exit-with-help "Error: Cannot specify multiple options (-e, -f, -m) together")
+      (zero? mode-count) (exit-with-help "Error: Must specify one of -e EXPR, -f FILE, or -m MESSAGE")
+      (and (:f modes) (not (.exists (io/file (:f opts)))))
       (do (println "Error: File does not exist:" (:f opts))
           (System/exit 1)))))
 
 ;; nREPL client implementation
-(defn bytes->str [x]
-  (if (bytes? x) (String. x) x))
+(defn ->str [x]
+  (if (bytes? x)
+    (String. x)
+    x))
 
-(defn convert-bytes-in-map [m]
-  (walk/postwalk
-   (fn [x]
-     (if (bytes? x)
-       (String. x)
-       x))
-   m))
+(defn ->str-deep [x]
+  (walk/postwalk ->str x))
 
 (defn send-eval-message [host port code opts]
   (let [socket (Socket. host port)
@@ -175,15 +174,9 @@
     ;; Collect all response messages until we get "done" status
     (loop [responses []]
       (let [response (bencode/read-bencode in)
-            ;; Print each response immediately in verbose mode
-            _ (when (:verbose opts)
-                (pp/pprint (convert-bytes-in-map response)))
-            status (get response "status")
-            status-strs (when status
-                          (if (coll? status)
-                            (map #(if (bytes? %) (String. %) %) status)
-                            [(if (bytes? status) (String. status) status)]))]
-        (if (and status-strs (some #(= % "done") status-strs))
+            _ (when (:verbose opts) (pp/pprint (->str-deep response)))
+            status-set (some->> (get response "status") (map ->str) set)]
+        (if (contains? status-set "done")
           (do
             (.close socket)
             (if (:verbose opts)
@@ -194,72 +187,31 @@
                    (conj responses response))))))))
 
 (defn process-eval-responses [responses]
-  (let [combined {:out []
-                  :err []
-                  :values []
-                  :ex nil
-                  :status []}]
-    (reduce (fn [acc resp]
-              (cond-> acc
-                (get resp "out") (update :out conj (bytes->str (get resp "out")))
-                (get resp "err") (update :err conj (bytes->str (get resp "err")))
-                (get resp "value") (update :values conj (bytes->str (get resp "value")))
-                (get resp "ex") (assoc :ex (bytes->str (get resp "ex")))
-                (get resp "status") (update :status into
-                                            (map bytes->str
-                                                 (if (coll? (get resp "status"))
-                                                   (get resp "status")
-                                                   [(get resp "status")])))))
-            combined
-            responses)))
+  (reduce (fn [acc resp]
+            (cond-> acc
+              (get resp "out")    (update :out conj (->str (get resp "out")))
+              (get resp "err")    (update :err conj (->str (get resp "err")))
+              (get resp "value")  (update :values conj (->str (get resp "value")))
+              (get resp "ex")     (assoc :ex (->str (get resp "ex")))
+              (get resp "status") (update :status into (->str (flatten [(get resp "status")])))))
+          {:out [] :err [] :values [] :ex nil :status []}
+          responses))
 
 (defn format-hook-response [processed has-error?]
-  (if has-error?
-    ;; Format error response with detailed information
-    (let [;; Build comprehensive error details
-          error-parts (cond-> []
-                        ;; Include exception info
-                        (:ex processed)
-                        (conj (str "Exception: " (:ex processed)))
-
-                        ;; Include stderr output
-                        (seq (:err processed))
-                        (concat (map #(str "Error: " %) (:err processed))))
-
-          ;; Include stdout if no other error info
-          error-parts (if (and (empty? error-parts) (seq (:out processed)))
-                        (concat error-parts (map #(str "Output: " %) (:out processed)))
-                        error-parts)
-
-          ;; Create main error message
-          error-msg (if (seq error-parts)
-                      (str/join " | " error-parts)
-                      "Evaluation error occurred")
-
-          ;; Build detailed reason with all available info
-          reason-parts (cond-> []
-                         (:ex processed)
-                         (conj (:ex processed))
-
-                         (seq (:err processed))
-                         (concat (:err processed))
-
-                         (seq (:out processed))
-                         (concat (:out processed)))
-
-          reason-msg (if (seq reason-parts)
-                       (str "Code evaluation failed:\n" (str/join "\n" reason-parts))
-                       "Code contains errors that must be fixed")]
-
+  (if-not has-error?
+    {:continue true :suppressOutput true}
+    (let [parts (cond-> []
+                  (:ex processed)  (conj (:ex processed))
+                  (seq (:err processed)) (into (:err processed))
+                  (seq (:out processed)) (into (:out processed)))
+          msg (if (seq parts)
+                (str/join " | " parts)
+                "Evaluation error occurred")]
       {:continue true
-       :stopReason error-msg
        :suppressOutput true
        :decision "block"
-       :reason reason-msg})
-
-    ;; Success response
-    {:continue true
-     :suppressOutput true}))
+       :stopReason msg
+       :reason (str "Code evaluation failed:\n" (str/join "\n" parts))})))
 
 (defn eval-expression [host port code opts]
   (try
@@ -349,17 +301,10 @@
       (loop [responses []
              timeout-count 0]
         (let [response (bencode/read-bencode in)
-              ;; Print each response immediately in verbose mode
-              _ (when (:verbose opts)
-                  (pp/pprint (convert-bytes-in-map response)))
-              status (get response "status")
-              status-strs (when status
-                            (if (coll? status)
-                              (map #(if (bytes? %) (String. %) %) status)
-                              [(if (bytes? status) (String. status) status)]))]
+              _ (when (:verbose opts) (pp/pprint (->str-deep response)))
+              status-set (some->> (get response "status") (map ->str) set)]
           (cond
-            ;; If we have a done status, we're finished
-            (and status-strs (some #(= % "done") status-strs))
+            (contains? status-set "done")
             (do
               (.close socket)
               (if (:verbose opts)
@@ -388,9 +333,8 @@
   (let [responses (send-raw-message host port message-str opts)]
     ;; In verbose mode, everything was already printed
     (when-not (:verbose opts)
-      ;; Pretty print each response
       (doseq [resp responses]
-        (pp/pprint (convert-bytes-in-map resp))))))
+        (pp/pprint (->str-deep resp))))))
 
 (defn -main [& args]
   (let [opts (cli/parse-opts args {:spec cli-spec})
@@ -420,151 +364,158 @@
         (when result
           (System/exit 2))))))
 
-;; Lazy load hook modules
-(defn ensure-hook-modules-loaded []
-  (when (not @hook-modules-loaded)
-    (let [script-dir (-> (System/getProperty "babashka.file")
-                         (clojure.java.io/file)
-                         (.getParentFile)
-                         (.getAbsolutePath))]
-      (load-file (str script-dir "/lib/hook_utils.clj"))
-      (require '[brepl.lib.hook-utils :as hook-utils])
-      (load-file (str script-dir "/lib/validator.clj"))
-      (require '[brepl.lib.validator :as validator])
-      (load-file (str script-dir "/lib/backup.clj"))
-      (require '[brepl.lib.backup :as backup])
-      (load-file (str script-dir "/lib/installer.clj"))
-      (require '[brepl.lib.installer :as installer]))
-    (reset! hook-modules-loaded true)))
+(defn debug-log [msg]
+  (spit "/tmp/brepl-hook-debug.log"
+        (str (java.time.LocalDateTime/now) " - " msg "\n")
+        :append true))
+
+(defn json-exit [response exit-code]
+  (println (json/generate-string response))
+  (System/exit exit-code))
+
+(defn block-hook [reason]
+  (json-exit {:continue true
+              :decision "block"
+              :stopReason reason
+              :reason reason} 1))
+
+(defn allow-hook
+  ([] (allow-hook nil))
+  ([correction]
+   (json-exit (cond-> {:continue true
+                       :decision "allow"
+                       :suppressOutput true}
+                correction (assoc :correction correction)) 0)))
 
 ;; Hook subcommand handlers
+(defn get-file-path-from-stdin []
+  (try
+    (let [file-path (-> (json/parse-stream *in* true)
+                        :tool_input
+                        :file_path)]
+      (debug-log (str "eval hook called for: " file-path))
+      file-path)
+    (catch Exception e
+      (debug-log (str "ERROR parsing stdin: " (.getMessage e)))
+      nil)))
+
+(defn get-hook-input [args]
+  (if (>= (count args) 2)
+    [(first args) (second args)]
+    (try
+      (let [{:keys [tool_name tool_input]} (json/parse-stream *in* true)
+            {:keys [file_path content old_string new_string]} tool_input]
+        (debug-log (str "Hook called - Tool: " tool_name " File: " file_path))
+        (case tool_name
+          "Write" [file_path content]
+          "Edit"  (let [current (if (.exists (io/file file_path)) (slurp file_path) "")]
+                    [file_path (str/replace-first current old_string new_string)])
+          [nil nil]))
+      (catch Exception e
+        (debug-log (str "ERROR parsing stdin: " (.getMessage e)))
+        [nil nil]))))
+
+(defn handle-validate [args]
+  (let [[file-path content] (get-hook-input args)]
+    (when (or (nil? file-path) (nil? content))
+      (block-hook "Could not parse hook input"))
+
+    (when-not (validator/clojure-file? file-path)
+      (allow-hook))
+
+    (if-let [error (validator/delimiter-error? content)]
+      (if-let [fixed (validator/auto-fix-brackets content)]
+        (do (when-let [session-id (System/getenv "SESSION_ID")]
+              (backup/create-backup file-path session-id))
+            (allow-hook fixed))
+        (block-hook (str "Syntax error in " file-path ": "
+                         (validator/format-error-message error file-path))))
+      (do (when-let [session-id (System/getenv "SESSION_ID")]
+            (backup/create-backup file-path session-id))
+          (allow-hook)))))
+
+(defn handle-eval [args]
+  (let [file-path (if (empty? args) (get-file-path-from-stdin) (first args))]
+    (when (nil? file-path)
+      (block-hook "Could not get file path"))
+
+    (when-not (.exists (io/file file-path))
+      (block-hook (str "File not found: " file-path)))
+
+    (let [content (slurp file-path)]
+      (when-let [error (validator/delimiter-error? content)]
+        (when-let [session-id (System/getenv "SESSION_ID")]
+          (backup/restore-backup session-id file-path))
+        (block-hook (str "Syntax error in " file-path ": " (:message error))))
+
+      (if-let [port (resolve-port nil file-path)]
+        (let [result (eval-file (resolve-host nil) port file-path {:hook true})]
+          (if (:has-error? result)
+            (json-exit {:continue true
+                        :decision "allow"
+                        :suppressOutput true
+                        :warning (str "Evaluation warning in " file-path ": "
+                                     (get-in result [:processed :ex] "Evaluation error"))} 0)
+            (allow-hook)))
+        (allow-hook)))))
+
+(defn handle-install [args]
+  (let [opts (cli/parse-opts args {:spec {:strict-eval {:coerce :boolean}
+                                           :parinfer {:coerce :boolean}}})
+        status (installer/check-status)]
+    (installer/install-hooks opts)
+    (println "Installing Claude Code hooks...")
+    (println "Hooks installed successfully.")
+    (println)
+    (when (:installed status)
+      (println "Settings file:" (:settings-path status)))
+    (System/exit 0)))
+
+(defn handle-uninstall [_args]
+  (installer/uninstall-hooks)
+  (println "Removing Claude Code hooks...")
+  (println "Hooks uninstalled successfully.")
+  (System/exit 0))
+
+(defn handle-session-end [args]
+  (if (empty? args)
+    (do (println "Error: session-id required")
+        (System/exit 1))
+    (do (backup/cleanup-session (first args))
+        (System/exit 0))))
+
+(defn show-hook-help [subcommand]
+  (println "brepl hook - Claude Code integration commands")
+  (println)
+  (println "USAGE:")
+  (println "    brepl hook validate <file> <content>")
+  (println "    brepl hook eval <file>")
+  (println "    brepl hook install [--strict-eval] [--parinfer]")
+  (println "    brepl hook uninstall")
+  (println "    brepl hook session-end <session-id>")
+  (println)
+  (println "SUBCOMMANDS:")
+  (println "    validate       Validate Clojure file syntax before edit")
+  (println "    eval           Evaluate file and check for runtime errors")
+  (println "    install        Install hooks in .claude/settings.local.json")
+  (println "    uninstall      Remove hooks from .claude/settings.local.json")
+  (println "    session-end    Clean up session backup files")
+  (System/exit (if (and subcommand
+                        (not (contains? #{"validate" "eval" "install" "uninstall" "session-end"} subcommand)))
+                 1 0)))
+
 (defn handle-hook-subcommand [subcommand args]
   (case subcommand
-    "validate"
-    (if (< (count args) 2)
-      (do (println (json/generate-string {:continue true :decision "block" :stopReason "invalid_arguments" :reason "Usage: brepl hook validate <file-path> <new-content>"}))
-          (System/exit 1))
-      (do (ensure-hook-modules-loaded)
-          (let [file-path (first args)
-                content (second args)
-                clojure-file? (ns-resolve (the-ns 'brepl.lib.validator) 'clojure-file?)
-                delimiter-error? (ns-resolve (the-ns 'brepl.lib.validator) 'delimiter-error?)]
-            (if-not (clojure-file? file-path)
-              (do (println (json/generate-string {:continue true :decision "allow" :suppressOutput true}))
-                  (System/exit 0)))
-            (let [error (delimiter-error? content)
-                  format-msg (ns-resolve (the-ns 'brepl.lib.validator) 'format-error-message)
-                  auto-fix (ns-resolve (the-ns 'brepl.lib.validator) 'auto-fix-brackets)
-                  create-backup (ns-resolve (the-ns 'brepl.lib.backup) 'create-backup)
-                  session-id (System/getenv "SESSION_ID")]
-              (if error
-                (let [fixed (auto-fix content)]
-                  (if fixed
-                    (do (when (and session-id create-backup)
-                          (create-backup file-path session-id))
-                        (println (json/generate-string {:continue true :decision "allow" :suppressOutput true :correction fixed}))
-                        (System/exit 0))
-                    (do (println (json/generate-string {:continue true :decision "block" :stopReason "syntax_error" :reason (str "Syntax error in " file-path ": " (format-msg error file-path))}))
-                        (System/exit 1))))
-                (do (when (and session-id create-backup)
-                      (create-backup file-path session-id))
-                    (println (json/generate-string {:continue true :decision "allow" :suppressOutput true}))
-                    (System/exit 0)))))))
+    "validate"    (handle-validate args)
+    "eval"        (handle-eval args)
+    "install"     (handle-install args)
+    "uninstall"   (handle-uninstall args)
+    "session-end" (handle-session-end args)
+    (show-hook-help subcommand)))
 
-    "eval"
-    (if (empty? args)
-      (do (println (json/generate-string {:continue true :decision "block" :stopReason "invalid_arguments" :reason "Usage: brepl hook eval <file-path>"}))
-          (System/exit 1))
-      (do (ensure-hook-modules-loaded)
-          (let [file-path (first args)
-                delimiter-error? (ns-resolve (the-ns 'brepl.lib.validator) 'delimiter-error?)
-                restore-backup (ns-resolve (the-ns 'brepl.lib.backup) 'restore-backup)
-                session-id (System/getenv "SESSION_ID")
-                host (resolve-host nil)
-                port (resolve-port nil file-path)]
-            ;; Load file and validate syntax first
-            (if (not (.exists (clojure.java.io/file file-path)))
-              (do (println (json/generate-string {:continue true :decision "block" :stopReason "file_not_found" :reason (str "File not found: " file-path)}))
-                  (System/exit 1))
-              ;; File exists, validate syntax
-              (let [file-content (slurp file-path)
-                    error (delimiter-error? file-content)]
-                (if error
-                  ;; Syntax error - restore backup
-                  (do (when (and session-id restore-backup)
-                        (restore-backup session-id file-path))
-                      (println (json/generate-string {:continue true :decision "block" :stopReason "syntax_error" :reason (str "Syntax error in " file-path ": " (:message error))}))
-                      (System/exit 1))
-                  ;; Valid syntax - try nREPL evaluation if port available
-                  (if port
-                    ;; Evaluate via nREPL
-                    (let [result (eval-file host port file-path {:hook true})]
-                      (if (:has-error? result)
-                        ;; Eval error - warn but allow by default
-                        (let [ex-msg (get-in result [:processed :ex] "Evaluation error")]
-                          (println (json/generate-string {:continue true :decision "allow" :suppressOutput true :warning (str "Evaluation warning in " file-path ": " ex-msg)}))
-                          (System/exit 0))
-                        ;; Success
-                        (do (println (json/generate-string {:continue true :decision "allow" :suppressOutput true}))
-                            (System/exit 0))))
-                    ;; No nREPL port - gracefully degrade, just allow
-                    (do (println (json/generate-string {:continue true :decision "allow" :suppressOutput true}))
-                        (System/exit 0)))))))))
-
-    "install"
-    (do (ensure-hook-modules-loaded)
-        (let [opts (cli/parse-opts args {:spec {:strict-eval {:coerce :boolean}
-                                                 :parinfer {:coerce :boolean}}})
-              install-result (ns-resolve (the-ns 'brepl.lib.installer) 'install-hooks)
-              check-result (ns-resolve (the-ns 'brepl.lib.installer) 'check-status)]
-          (install-result opts)
-          (let [status (check-result)]
-            (println "Installing Claude Code hooks...")
-            (println "Hooks installed successfully.")
-            (println)
-            (when (:installed status)
-              (println "Settings file:" (:settings-path status)))
-            (System/exit 0))))
-
-    "uninstall"
-    (do (ensure-hook-modules-loaded)
-        (let [uninstall-result (ns-resolve (the-ns 'brepl.lib.installer) 'uninstall-hooks)]
-          (uninstall-result)
-          (println "Removing Claude Code hooks...")
-          (println "Hooks uninstalled successfully.")
-          (System/exit 0)))
-
-    "session-end"
-    (if (empty? args)
-      (do (println "Error: session-id required")
-          (System/exit 1))
-      (do (ensure-hook-modules-loaded)
-          (let [session-id (first args)
-                cleanup (ns-resolve (the-ns 'brepl.lib.backup) 'cleanup-session)]
-            (cleanup session-id)
-            (System/exit 0))))
-
-    ;; Help for hook subcommands
-    (do
-      (println "brepl hook - Claude Code integration commands")
-      (println)
-      (println "USAGE:")
-      (println "    brepl hook validate <file> <content>")
-      (println "    brepl hook eval <file>")
-      (println "    brepl hook install [--strict-eval] [--parinfer]")
-      (println "    brepl hook uninstall")
-      (println "    brepl hook session-end <session-id>")
-      (println)
-      (println "SUBCOMMANDS:")
-      (println "    validate       Validate Clojure file syntax before edit")
-      (println "    eval           Evaluate file and check for runtime errors")
-      (println "    install        Install hooks in .claude/settings.local.json")
-      (println "    uninstall      Remove hooks from .claude/settings.local.json")
-      (println "    session-end    Clean up session backup files")
-      (System/exit (if (and subcommand (not (contains? #{"validate" "eval" "install" "uninstall" "session-end"} subcommand))) 1 0)))))
-
-(defn -main-hook [args]
+(defn -main-hook
   "Handle brepl hook subcommands"
+  [args]
   (if (empty? args)
     (handle-hook-subcommand nil nil)
     (let [subcommand (first args)

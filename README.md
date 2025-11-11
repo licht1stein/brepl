@@ -3,31 +3,66 @@
 [![GitHub release](https://img.shields.io/github/v/release/licht1stein/brepl?label=version)](https://github.com/licht1stein/brepl/releases/latest)
 [![Run Tests](https://github.com/licht1stein/brepl/actions/workflows/test.yml/badge.svg)](https://github.com/licht1stein/brepl/actions/workflows/test.yml)
 
-Lightweight REPL-driven development for Clojure with AI coding agents—zero external dependencies.
-
-**v2.0.0 Breaking Change:** Single-file installation no longer supported. Hook features require `lib/` directory. Use bbin, Nix, or clone the repository for full functionality.
+Lightweight REPL-driven development for Clojure with AI coding agents.
 
 ## What is brepl?
 
-brepl enables AI-assisted Clojure development using your existing nREPL connection and Babashka's built-in parser. No external binaries (parinfer-rust), no protocol servers (MCP), no additional toolchain required.
+brepl enables AI-assisted Clojure development using your existing nREPL connection and Babashka's built-in parser. Integrates with [parinfer-rust](https://github.com/eraserhd/parinfer-rust) for automatic bracket fixing when available.
 
 **Primary use case:** AI coding agents that automatically validate syntax, fix bracket errors, and keep your REPL synchronized with code changes.
 
 **Also works as:** Fast command-line nREPL client for one-shot evaluations, scripts, and automation.
 
+### Bracket Auto-Fix
+
+brepl uses [parinfer-rust](https://github.com/eraserhd/parinfer-rust) for intelligent bracket correction:
+
+- **With parinfer-rust installed**: Automatically fixes mismatched delimiters, missing brackets, and extra closing parens
+- **Without parinfer-rust**: Blocks with detailed syntax errors for Claude to fix manually
+- **Nix installation**: Includes parinfer-rust automatically
+
+To install parinfer-rust separately:
+```bash
+# macOS
+brew install parinfer-rust
+
+# Nix
+nix-env -iA nixpkgs.parinfer-rust
+
+# Or build from source
+git clone https://github.com/eraserhd/parinfer-rust
+cd parinfer-rust && cargo install --path .
+```
+
 ## Quick Start
 
 ### For AI-Assisted Development
 
+**Using bbin:**
 ```bash
 # Install brepl
 bbin install io.github.licht1stein/brepl
+
+# Install parinfer-rust for auto-fix (optional but recommended)
+brew install parinfer-rust  # or see Bracket Auto-Fix section above
 
 # Start your nREPL
 bb nrepl-server
 
 # Install hooks in your project
 brepl hook install
+```
+
+**Using Nix (includes parinfer-rust automatically):**
+```bash
+nix-env -iA nixpkgs.brepl
+
+# Or in a flake:
+{
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  # ... in your packages:
+  brepl = pkgs.brepl;
+}
 ```
 
 Now AI agents automatically validate and evaluate Clojure code changes through your running REPL.
@@ -45,14 +80,14 @@ brepl -f script.clj
 
 ## Features
 
-### AI-Assisted Development (v2.0.0)
-- 🤖 **Automatic syntax validation** - Pre-edit checking with recursive bracket auto-fix
-- 🔧 **Auto-fix delimiters** - Handles both missing and extra brackets (94.9% parinfer agreement)
+### AI-Assisted Development (v2.0.1)
+- 🤖 **Automatic syntax validation** - Pre-edit checking using Babashka's edamame parser
+- 🔧 **Intelligent bracket auto-fix** - Uses parinfer-rust when available, detailed errors otherwise
 - 💾 **Session-based backups** - Automatic backup/restore on errors
 - 🔄 **REPL synchronization** - Evaluates file changes through your running nREPL
-- 🎯 **Zero external dependencies** - Pure Clojure using Babashka's built-in edamame parser
 - 📦 **One-command setup** - `brepl hook install` in any project
 - ⚡ **Project-aware** - Handles multiple REPLs via port discovery
+- 🎯 **Graceful degradation** - Works with or without parinfer-rust
 
 ### nREPL Client Features
 - 🚀 **Fast startup** - Built with Babashka for instant execution
@@ -83,7 +118,7 @@ let
   brepl = pkgs.callPackage (pkgs.fetchFromGitHub {
     owner = "licht1stein";
     repo = "brepl";
-    rev = "v2.0.0";
+    rev = "v2.0.1";
     hash = "sha256-7uzCxODIFbqBARnCsXOQkUHHFUWowewALjktdQhJibo=";
   } + "/package.nix") {};
 in
@@ -315,10 +350,10 @@ brepl provides lightweight hooks for REPL-driven development with AI coding agen
 
 **Two Approaches to AI-Assisted Clojure:**
 
-1. **Protocol servers + external binaries** - Install parinfer-rust binary, run MCP servers, configure protocol bridges
-2. **brepl hooks** - Pure Clojure using Babashka's built-in edamame parser
+1. **Protocol servers** - Run MCP servers, configure protocol bridges, manage multiple processes
+2. **brepl hooks** - Direct integration with your REPL using Babashka, optionally enhanced with parinfer-rust
 
-brepl chooses approach #2: zero external dependencies, direct integration with your REPL, no additional processes. If you're already running Babashka and nREPL, you have everything needed.
+brepl uses direct REPL integration with minimal overhead. Syntax validation uses Babashka's built-in edamame parser, and bracket auto-fix delegates to parinfer-rust when available (included in Nix installs, optional for bbin).
 
 #### Quick Setup
 
@@ -405,30 +440,28 @@ brepl hook eval ~/projects/service-a/src/api.clj      # port 7000
 brepl hook eval ~/projects/service-b/src/handler.clj  # port 8000
 ```
 
-#### Design Philosophy: Minimal Dependencies
+#### Design Philosophy: Pragmatic Integration
 
-brepl takes a different approach to AI-assisted Clojure development. While some solutions require installing external binaries for bracket repair (parinfer-rust) or running protocol servers (MCP), brepl uses only what's already available in Babashka.
+brepl takes a pragmatic approach to AI-assisted Clojure development: use battle-tested tools when available, provide clear feedback when not.
 
-**Zero External Dependencies:**
-- ✅ No native binaries to install (parinfer-rust, clojure-lsp, etc.)
-- ✅ No additional servers or protocol implementations
-- ✅ Pure Clojure solution using edamame (built into Babashka)
-- ✅ Works anywhere Babashka runs—no platform-specific builds
+**Minimal Core with Optional Enhancement:**
+- ✅ Syntax validation uses edamame (built into Babashka)
+- ✅ Bracket auto-fix delegates to parinfer-rust when available
+- ✅ Works without parinfer-rust (blocks with detailed errors for Claude to fix)
+- ✅ No protocol servers or separate processes required
 
-**Proven Effectiveness:**
-Testing shows 94.9% agreement with industry-standard tools for bracket correction. The 5% difference affects edge cases (anonymous function reader macros) that rarely occur in practice and degrade gracefully with clear error messages.
-
-**Integration over Installation:**
+**Direct REPL Integration:**
 - ✅ Uses your running nREPL connection (no separate context)
 - ✅ Works with any nREPL server (Babashka, Clojure, ClojureScript)
 - ✅ Minimal overhead (fast Babashka startup)
 - ✅ Graceful degradation (works without nREPL for syntax checking)
 - ✅ Project-aware (handles multiple REPLs automatically)
 
-**Trade-off:**
-If you need 100% compatibility with parinfer-rust or full MCP protocol support, other tools may be better fits. brepl prioritizes zero-dependency installation and tight REPL integration for the 95% of cases that "just work."
+**Installation Options:**
+- **Nix**: Includes parinfer-rust automatically (zero configuration)
+- **bbin**: Optionally install parinfer-rust for auto-fix (works without it)
 
-Perfect for developers who want AI assistance without expanding their toolchain.
+Perfect for developers who want reliable AI assistance without managing multiple processes or protocol servers.
 
 #### Implementation Details
 

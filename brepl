@@ -52,6 +52,7 @@
   (println "    brepl [OPTIONS] -e <expr>")
   (println "    brepl [OPTIONS] -f <file>")
   (println "    brepl [OPTIONS] -m <message>")
+  (println "    brepl hook <subcommand> [args]")
   (println)
   (println "OPTIONS:")
   (println (cli/format-opts {:spec cli-spec :order [:e :f :m :h :p :verbose :version :help]}))

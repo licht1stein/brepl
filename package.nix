@@ -38,12 +38,13 @@ stdenv.mkDerivation rec {
   '';
 
   meta = with lib; {
-    description = "Fast, lightweight nREPL client for one-shot interactions with any nREPL server";
+    description = "Lightweight REPL-driven development for Clojure with AI coding agents";
     longDescription = ''
-      brepl is a lightweight Babashka-based nREPL client designed for quick,
-      one-shot interactions with Clojure nREPL servers. It supports expression
-      evaluation, file loading, and sending raw nREPL messages, making it
-      perfect for scripting, editor integration, and command-line workflows.
+      brepl enables AI-assisted Clojure development using your existing nREPL
+      connection and Babashka's built-in parser. Provides automatic syntax
+      validation, bracket auto-fix, and REPL synchronization with zero external
+      dependencies. Also works as a fast nREPL client for command-line evaluations,
+      file loading, and scripting workflows.
     '';
     homepage = "https://github.com/licht1stein/brepl";
     changelog = "https://github.com/licht1stein/brepl/releases/tag/v${version}";

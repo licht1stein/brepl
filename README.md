@@ -3,41 +3,68 @@
 [![GitHub release](https://img.shields.io/github/v/release/licht1stein/brepl?label=version)](https://github.com/licht1stein/brepl/releases/latest)
 [![Run Tests](https://github.com/licht1stein/brepl/actions/workflows/test.yml/badge.svg)](https://github.com/licht1stein/brepl/actions/workflows/test.yml)
 
-A fast, lightweight nREPL client for one-shot interactions with any nREPL server.
+Lightweight REPL-driven development for Clojure with AI coding agents—zero external dependencies.
 
 **v2.0.0 Breaking Change:** Single-file installation no longer supported. Hook features require `lib/` directory. Use bbin, Nix, or clone the repository for full functionality.
 
+## What is brepl?
+
+brepl enables AI-assisted Clojure development using your existing nREPL connection and Babashka's built-in parser. No external binaries (parinfer-rust), no protocol servers (MCP), no additional toolchain required.
+
+**Primary use case:** AI coding agents that automatically validate syntax, fix bracket errors, and keep your REPL synchronized with code changes.
+
+**Also works as:** Fast command-line nREPL client for one-shot evaluations, scripts, and automation.
+
 ## Quick Start
 
-1. **Start a Babashka nREPL server** in your project:
-   ```bash
-   bb nrepl-server
-   # Starts on default port 1667
-   ```
+### For AI-Assisted Development
 
-2. **Use brepl** to evaluate expressions:
-   ```bash
-   brepl -p 1667 -e '(+ 1 2 3)'
-   # => 6
-   ```
+```bash
+# Install brepl
+bbin install io.github.licht1stein/brepl
 
-You need to specify the port with `-p 1667` since Babashka doesn't create a `.nrepl-port` file by default.
+# Start your nREPL
+bb nrepl-server
+
+# Install hooks in your project
+brepl hook install
+```
+
+Now AI agents automatically validate and evaluate Clojure code changes through your running REPL.
+
+### For Command-Line Usage
+
+```bash
+# Evaluate expressions
+brepl -e '(+ 1 2 3)'
+# => 6
+
+# Load files
+brepl -f script.clj
+```
 
 ## Features
 
+### AI-Assisted Development (v2.0.0)
+- 🤖 **Automatic syntax validation** - Pre-edit checking with recursive bracket auto-fix
+- 🔧 **Auto-fix delimiters** - Handles both missing and extra brackets (94.9% parinfer agreement)
+- 💾 **Session-based backups** - Automatic backup/restore on errors
+- 🔄 **REPL synchronization** - Evaluates file changes through your running nREPL
+- 🎯 **Zero external dependencies** - Pure Clojure using Babashka's built-in edamame parser
+- 📦 **One-command setup** - `brepl hook install` in any project
+- ⚡ **Project-aware** - Handles multiple REPLs via port discovery
+
+### nREPL Client Features
 - 🚀 **Fast startup** - Built with Babashka for instant execution
 - 💬 **Full nREPL protocol** - Access any nREPL operation, not just evaluation
-- 📝 **Expression evaluation** - Evaluate Clojure expressions directly from command line
+- 📝 **Expression evaluation** - Evaluate Clojure expressions from command line
 - 📁 **File loading** - Load and execute entire Clojure files
 - 🔍 **Auto-discovery** - Automatically detects `.nrepl-port` files
 - 📂 **Project-aware** (v1.3.0) - Finds `.nrepl-port` by walking up from file's directory
-- 🤖 **AI-assisted development** (v2.0.0) - Lightweight hooks for AI agents with auto-fix and validation
-- ⚙️ **Flexible configuration** - Support for environment variables and CLI arguments
+- ⚙️ **Flexible configuration** - Environment variables and CLI arguments
 - 🐛 **Proper error handling** - Shows exceptions and stack traces
 - 📊 **Verbose mode** - Debug nREPL communication with `--verbose`
-- 🎯 **One-shot design** - Perfect for scripts, editor integration, and automation
-- 🛠️ **Easy installation** - Install via bbin or manual setup
-- ✅ **Well tested** - Comprehensive test suite included
+- 🎯 **One-shot design** - Perfect for scripts and automation
 
 ## Installation
 

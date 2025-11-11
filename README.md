@@ -39,24 +39,13 @@ You need to specify the port with `-p 1667` since Babashka doesn't create a `.nr
 
 ## Installation
 
-### Option 1: Install via bbin
+### Option 1: Install via bbin (recommended)
 
 ```bash
 bbin install io.github.licht1stein/brepl
 ```
 
-### Option 2: Download with curl
-
-```bash
-# Download latest release (v1.4.0)
-curl -sSL https://raw.githubusercontent.com/licht1stein/brepl/v1.4.0/brepl -o brepl
-chmod +x brepl
-# Move to a directory on your PATH
-```
-
-### Option 3: Install with Nix
-
-Add to your project's `shell.nix`:
+### Option 2: Install with Nix
 
 ```nix
 { pkgs ? import <nixpkgs> {} }:
@@ -76,20 +65,15 @@ pkgs.mkShell {
 
 Then run `nix-shell` to enter a shell with brepl available.
 
-### Option 4: Manual Installation
+### Option 3: Manual Installation
 
-1. Clone or download the repository
-2. Make the script executable:
-   ```bash
-   chmod +x brepl
-   ```
-3. Place it somewhere on your PATH:
-   ```bash
-   # Copy to a directory on your PATH
-   cp brepl ~/.local/bin/
-   # Or create a symlink
-   ln -s /path/to/brepl/brepl ~/.local/bin/brepl
-   ```
+```bash
+git clone https://github.com/licht1stein/brepl.git
+cd brepl
+
+# Add to PATH
+ln -s $(pwd)/brepl ~/.local/bin/brepl
+```
 
 ## Usage
 

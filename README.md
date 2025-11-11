@@ -401,6 +401,33 @@ brepl hooks integrate with your existing setup:
 
 Perfect for REPL-driven development where you want AI assistance without changing how you work.
 
+#### Auto-Fix Implementation
+
+brepl uses edamame (Babashka's built-in parser) for bracket auto-correction instead of external tools like parinfer-rust. This design choice prioritizes:
+
+**Zero Installation Friction:**
+- ✅ No binary dependencies to install
+- ✅ Works anywhere Babashka runs (Linux, macOS, Windows)
+- ✅ No version compatibility issues
+- ✅ Pure Clojure solution using libraries already available
+
+**Proven Effectiveness:**
+Comprehensive testing against parinfer-rust shows **94.9% agreement** across 39 test cases (see `BRACKET_AUTO_FIX_ANALYSIS.md` for detailed comparison). Both tools:
+- Fix extra closing brackets by removing from end
+- Fix missing closing brackets by appending
+- Handle nested structures with multiple errors
+- Pragmatically fix "mismatched" delimiters as typos: `[1 2 3)` → `[1 2 3]`
+- Correctly give up on genuinely complex errors (deeply nested mismatches)
+
+**Trade-offs:**
+- ⚠️ Can't fix anonymous function reader macros: `#(+ % 1` (rare edge case)
+- ⚠️ Multi-form with complex errors may fix only first form
+- ✅ **Benefit:** Zero dependencies means brepl "just works" without setup
+
+The 5% difference from parinfer affects edge cases that rarely occur in practice. When auto-fix can't help, the AI agent receives a clear error message and fixes it manually—which works fine.
+
+For most AI-assisted development, edamame-based auto-fix provides the same quality as parinfer with dramatically simpler installation and zero external dependencies.
+
 ## Troubleshooting
 
 **Error: No port specified, no .nrepl-port file found, and BREPL_PORT not set**

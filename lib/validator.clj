@@ -45,6 +45,7 @@
 (defn auto-fix-brackets
   "Attempt to auto-fix bracket errors recursively.
    Handles both missing brackets (append) and extra brackets (remove from end).
+   Does NOT fix string literals - too complex to insert quotes at correct position.
    Returns fixed content if successful, or nil if unable to fix."
   [content]
   (loop [current content
@@ -59,13 +60,17 @@
         ;; Give up after 10 attempts to prevent infinite loops
         nil
 
+        ;; Don't try to fix string delimiters - requires inserting at correct position
+        (= "\"" (:expected-delimiter error))
+        nil
+
         ;; Unmatched delimiter - try removing from end
         (and (clojure.string/includes? (:message error) "Unmatched delimiter")
              (> (count current) 0))
         (recur (subs current 0 (dec (count current)))
                (inc attempts))
 
-        ;; Missing delimiter - append expected
+        ;; Missing bracket/brace/paren - append expected
         (and (:expected-delimiter error)
              (not= "" (:expected-delimiter error)))
         (recur (str current (:expected-delimiter error))

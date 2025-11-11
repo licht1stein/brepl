@@ -4,6 +4,7 @@
 
 (require '[babashka.cli :as cli]
          '[clojure.java.io :as io]
+         '[babashka.fs :as fs]
          '[clojure.string :as str]
          '[bencode.core :as bencode]
          '[clojure.pprint :as pp]
@@ -70,24 +71,28 @@
         Integer/parseInt)))
 
 (defn find-nrepl-port-in-parents
-  "Search for .nrepl-port file starting from the given directory and walking up the directory tree.
+  "Search for .nrepl-port file starting from the given directory and walking up to current working directory.
+  Stops at CWD to avoid searching outside the project.
   Returns the port number from the first .nrepl-port file found, or nil if none found."
   [start-dir]
-  (loop [dir (io/file start-dir)]
-    (when dir
-      (let [port-file (io/file dir ".nrepl-port")]
-        (if (.exists port-file)
-          (let [port (try
-                       (-> (slurp port-file)
-                           str/trim
-                           Integer/parseInt)
-                       (catch Exception e
-                         ;; If we can't parse the port file, continue searching
-                         nil))]
-            (if port
-              port
-              (recur (.getParentFile dir))))
-          (recur (.getParentFile dir)))))))
+  (let [cwd (fs/absolutize (fs/cwd))]
+    (loop [dir (fs/absolutize start-dir)]
+      (when (and dir
+                 ;; Stop if we've gone above the current working directory
+                 (fs/starts-with? dir cwd))
+        (let [port-file (fs/file dir ".nrepl-port")]
+          (if (fs/exists? port-file)
+            (let [port (try
+                         (-> (slurp port-file)
+                             str/trim
+                             Integer/parseInt)
+                         (catch Exception e
+                           ;; If we can't parse the port file, continue searching
+                           nil))]
+              (if port
+                port
+                (recur (fs/parent dir))))
+            (recur (fs/parent dir))))))))
 
 (defn get-env-var [var-name]
   (System/getenv var-name))
@@ -105,8 +110,7 @@
    (or cli-port
        (if file-path
          ;; For -f option: search from file's directory upward
-         (let [file (io/file file-path)
-               parent-dir (.getParentFile file)]
+         (let [parent-dir (fs/parent (fs/absolutize file-path))]
            (when parent-dir
              (find-nrepl-port-in-parents parent-dir)))
          ;; For -e and -m options: use current directory

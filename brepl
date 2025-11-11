@@ -80,15 +80,13 @@
         Integer/parseInt)))
 
 (defn find-nrepl-port-in-parents
-  "Search for .nrepl-port file starting from the given directory and walking up to current working directory.
+  "Search for .nrepl-port file starting from the given directory and walking up to CWD.
   Stops at CWD to avoid searching outside the project.
   Returns the port number from the first .nrepl-port file found, or nil if none found."
   [start-dir]
   (let [cwd (fs/absolutize (fs/cwd))]
     (loop [dir (fs/absolutize start-dir)]
-      (when (and dir
-                 ;; Stop if we've gone above the current working directory
-                 (fs/starts-with? dir cwd))
+      (when dir
         (let [port-file (fs/file dir ".nrepl-port")]
           (if (fs/exists? port-file)
             (let [port (try
@@ -101,7 +99,10 @@
               (if port
                 port
                 (recur (fs/parent dir))))
-            (recur (fs/parent dir))))))))
+            ;; No port file, continue if we haven't reached CWD yet
+            (let [parent (fs/parent dir)]
+              (when (and parent (not (= dir cwd)))
+                (recur parent)))))))))
 
 (defn get-env-var [var-name]
   (System/getenv var-name))

@@ -11,7 +11,7 @@
   (:import [java.net Socket]
            [java.io PushbackInputStream]))
 
-(def version "2.0.0")
+(def version "2.0.1")
 
 ;; Load lib files and require namespaces
 (let [script-dir (some-> (System/getProperty "babashka.file")

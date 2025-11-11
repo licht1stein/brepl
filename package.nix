@@ -17,21 +17,12 @@ stdenv.mkDerivation rec {
   installPhase = ''
     runHook preInstall
 
-    # Install to $out/share/brepl to preserve directory structure
     mkdir -p $out/share/brepl $out/bin
     cp brepl $out/share/brepl/
     cp -r lib $out/share/brepl/
     chmod +x $out/share/brepl/brepl
 
-    # Create wrapper script in bin that calls the real script
-    cat > $out/bin/brepl << 'WRAPPER'
-    #!/usr/bin/env bash
-    exec $out/share/brepl/brepl "$@"
-    WRAPPER
-    chmod +x $out/bin/brepl
-
-    # Wrap to ensure babashka is in PATH
-    wrapProgram $out/bin/brepl \
+    makeWrapper $out/share/brepl/brepl $out/bin/brepl \
       --prefix PATH : ${lib.makeBinPath [ babashka ]}
 
     runHook postInstall

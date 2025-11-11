@@ -32,14 +32,17 @@
 (defn brepl-hook-config
   "Generate brepl hook configuration for Claude Code."
   [opts]
-  {:PreToolUse {:command "brepl hook validate"
-                :args ["{filePath}" "{fileContent}"]
-                :continueOnError false}
-   :PostToolUse {:command "brepl hook eval"
-                 :args ["{filePath}"]
-                 :continueOnError (not (:strict-eval opts))}
-   :SessionEnd {:command "brepl hook session-end"
-                :args ["{sessionId}"]}})
+  {:PreToolUse [{:matcher "Edit|Write|Update"
+                 :hooks [{:type "command"
+                          :command "brepl hook validate"
+                          :continueOnError false}]}]
+   :PostToolUse [{:matcher "Edit|Write|Update"
+                  :hooks [{:type "command"
+                           :command "brepl hook eval"
+                           :continueOnError (not (:strict-eval opts))}]}]
+   :SessionEnd [{:matcher "*"
+                 :hooks [{:type "command"
+                          :command "brepl hook session-end"}]}]})
 
 (defn merge-hooks
   "Merge new hooks with existing ones, avoiding duplicates."

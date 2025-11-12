@@ -7,13 +7,13 @@
 
 ## What is brepl?
 
-**brepl** (Bracket-fixing REPL) enables AI-assisted Clojure development by solving the notorious parenthesis problem. It provides three essential capabilities for AI agents:
+**brepl** (Bracket-fixing REPL) enables AI-assisted Clojure development by solving the notorious parenthesis problem. It's primarily designed for [Claude Code](https://claude.ai/claude-code) through its hook system, providing three essential capabilities:
 
 1. **🔧 Automatic bracket fixing** - Intelligently corrects mismatched parentheses, brackets, and braces using [parinfer-rust](https://github.com/eraserhd/parinfer-rust) when available
 2. **⚡ Simple REPL evaluation** - Gives AI agents a straightforward way to evaluate code in your running REPL, enabling truly interactive development
 3. **🔄 Live file synchronization** - Automatically evaluates edited files in the REPL, providing early feedback on evaluation errors before they become problems
 
-**Primary use case:** AI coding agents that need reliable Clojure syntax handling and immediate REPL feedback.
+**Primary use case:** Claude Code and other AI coding agents that need reliable Clojure syntax handling and immediate REPL feedback.
 
 **Versatile tool:** While designed for AI workflows, brepl is equally capable as a lightweight CLI nREPL client for one-shot evaluations, scripts, and automation—making it useful for both AI-assisted and traditional development workflows.
 
@@ -53,9 +53,16 @@ brew install parinfer-rust  # or see Bracket Auto-Fix section above
 # Start your nREPL
 bb nrepl-server
 
-# Install hooks in your project
+# Install hooks in your project for Claude Code
 brepl hook install
 ```
+
+The `brepl hook install` command creates or updates `.claude/settings.local.json` in your project, configuring Claude Code to:
+- Validate and auto-fix brackets before every file edit
+- Evaluate changed Clojure files in your running REPL after edits
+- Provide immediate feedback on syntax and evaluation errors
+
+This enables Claude to write Clojure code confidently without worrying about parentheses or missing REPL feedback.
 
 **Using Nix (includes parinfer-rust automatically):**
 ```bash
@@ -356,34 +363,44 @@ For a complete list of standard nREPL operations, see the [nREPL documentation](
 brepl -m '{"op" "describe"}' --verbose
 ```
 
-### AI-Assisted Development
+### AI-Assisted Development with Claude Code
 
-brepl provides lightweight hooks for REPL-driven development with AI coding agents.
+brepl is specifically designed to integrate with [Claude Code](https://claude.ai/claude-code) through its hook system, providing seamless REPL-driven development for AI agents.
+
+**Why brepl for Claude Code?**
+
+Claude (and other LLMs) often struggle with Lisp parentheses, leading to syntax errors that break the development flow. brepl solves this by intercepting Claude's file operations and:
+1. Fixing bracket errors before they're written to disk
+2. Evaluating code in your REPL immediately after edits
+3. Providing clear feedback so Claude can correct course quickly
 
 **Two Approaches to AI-Assisted Clojure:**
 
 1. **Protocol servers** - Run MCP servers, configure protocol bridges, manage multiple processes
-2. **brepl hooks** - Direct integration with your REPL using Babashka, optionally enhanced with parinfer-rust
+2. **brepl hooks** - Direct integration with Claude Code using your existing REPL (our approach)
 
 brepl uses direct REPL integration with minimal overhead. Syntax validation uses Babashka's built-in edamame parser, and bracket auto-fix delegates to parinfer-rust when available (included in Nix installs, optional for bbin).
 
-#### Quick Setup
+#### Quick Setup for Claude Code
 
-Install hooks in your project:
+The `brepl hook install` command configures your project for Claude Code by creating or updating `.claude/settings.local.json`:
 
 ```bash
+# In your Clojure project directory:
 brepl hook install
 ```
 
-This creates `.claude/settings.local.json` with validation and evaluation hooks that:
-- **Pre-edit**: Validate syntax and auto-fix bracket errors before file writes
-- **Post-edit**: Evaluate changed files via your existing nREPL connection
-- **Session cleanup**: Remove temporary backups when done
+This installs three hooks that run automatically during Claude Code sessions:
+- **Pre-edit hook**: Intercepts Claude's file writes, validates syntax, and auto-fixes brackets
+- **Post-edit hook**: Evaluates the edited file in your REPL and reports any runtime errors
+- **Session cleanup**: Removes temporary backup files when Claude Code session ends
+
+Once installed, Claude can edit your Clojure files without worrying about parentheses, and you'll see immediate REPL feedback for every change.
 
 #### Hook Commands
 
 **`brepl hook install`**
-Installs hooks to `.claude/settings.local.json` for the current project. Idempotent—safe to run multiple times.
+Creates or updates `.claude/settings.local.json` to configure Claude Code hooks for the current project. This file tells Claude Code to run brepl for validation and evaluation on every Clojure file edit. Idempotent—safe to run multiple times.
 
 **`brepl hook validate <file> <content>`**
 Pre-edit syntax validation with automatic bracket correction. Recursively closes unclosed brackets and braces using the edamame parser. Returns corrected code or blocks with detailed error messages.

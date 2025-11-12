@@ -137,8 +137,8 @@ let
   brepl = pkgs.callPackage (pkgs.fetchFromGitHub {
     owner = "licht1stein";
     repo = "brepl";
-    rev = "v2.0.2";
-    hash = "sha256-PqJ2Goi1nfL6ssSXn+UeVeYbbg8Ypcj44C1dTLFMGZ0=";
+    rev = "v2.0.3";
+    hash = "sha256-Pdrr9TKU0IFnhRoGqDGNSnuyp1aR/ey5W2VisqcP4w0=";
   } + "/package.nix") {};
 in
 pkgs.mkShell {

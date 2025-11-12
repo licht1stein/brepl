@@ -80,7 +80,7 @@ brepl -f script.clj
 
 ## Features
 
-### AI-Assisted Development (v2.0.1)
+### AI-Assisted Development (v2.0.2)
 - 🤖 **Automatic syntax validation** - Pre-edit checking using Babashka's edamame parser
 - 🔧 **Intelligent bracket auto-fix** - Uses parinfer-rust when available, detailed errors otherwise
 - 💾 **Session-based backups** - Automatic backup/restore on errors
@@ -118,8 +118,8 @@ let
   brepl = pkgs.callPackage (pkgs.fetchFromGitHub {
     owner = "licht1stein";
     repo = "brepl";
-    rev = "v2.0.1";
-    hash = "sha256-fFLPFtlze/Dhg5X4yC3T3mxLZI/b4pXrBJ5Nfszo5e0=";
+    rev = "v2.0.2";
+    hash = "";
   } + "/package.nix") {};
 in
 pkgs.mkShell {

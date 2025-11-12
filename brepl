@@ -11,7 +11,7 @@
   (:import [java.net Socket]
            [java.io PushbackInputStream]))
 
-(def version "2.0.1")
+(def version "2.0.2")
 
 ;; Load lib files and require namespaces
 (let [script-dir (some-> (System/getProperty "babashka.file")
@@ -373,19 +373,31 @@
   (println (json/generate-string response))
   (System/exit exit-code))
 
-(defn block-hook [reason]
-  (json-exit {:continue true
-              :decision "block"
-              :stopReason reason
-              :reason reason} 1))
+(defn block-hook
+  ([reason] (block-hook "PreToolUse" reason))
+  ([event-name reason]
+   (json-exit {:hookSpecificOutput
+               {:hookEventName event-name
+                :permissionDecision "deny"
+                :permissionDecisionReason reason}} 1)))
 
 (defn allow-hook
-  ([] (allow-hook nil))
-  ([correction]
-   (json-exit (cond-> {:continue true
-                       :decision "allow"
-                       :suppressOutput true}
-                correction (assoc :correction correction)) 0)))
+  ([] (json-exit {:hookSpecificOutput
+                  {:hookEventName "PreToolUse"
+                   :permissionDecision "allow"}} 0))
+  ([event-name] (json-exit {:hookSpecificOutput
+                             {:hookEventName event-name
+                              :permissionDecision "allow"}} 0))
+  ([tool-name tool-input fixed-content]
+   (let [updated-input (case tool-name
+                         "Edit" (assoc tool-input :new_string fixed-content)
+                         ("Write" "Update") (assoc tool-input :content fixed-content)
+                         tool-input)]
+     (json-exit {:hookSpecificOutput
+                 {:hookEventName "PreToolUse"
+                  :permissionDecision "allow"
+                  :permissionDecisionReason "Auto-fixed bracket errors"
+                  :updatedInput updated-input}} 0))))
 
 ;; Hook subcommand handlers
 (defn get-file-path-from-stdin []
@@ -401,22 +413,23 @@
 
 (defn get-hook-input [args]
   (if (>= (count args) 2)
-    [(first args) (second args)]
+    [(first args) (second args) nil nil]
     (try
       (let [{:keys [tool_name tool_input]} (json/parse-stream *in* true)
             {:keys [file_path content old_string new_string]} tool_input]
         (debug-log (str "Hook called - Tool: " tool_name " File: " file_path))
         (case tool_name
-          "Write" [file_path content]
-          "Edit"  (let [current (if (.exists (io/file file_path)) (slurp file_path) "")]
-                    [file_path (str/replace-first current old_string new_string)])
-          [nil nil]))
+          "Write"  [file_path content tool_name tool_input]
+          "Update" [file_path content tool_name tool_input]
+          ;; For Edit: validate just the replacement text (new_string), not the full file
+          "Edit"   [file_path new_string tool_name tool_input]
+          [nil nil nil nil]))
       (catch Exception e
         (debug-log (str "ERROR parsing stdin: " (.getMessage e)))
-        [nil nil]))))
+        [nil nil nil nil]))))
 
 (defn handle-validate [args]
-  (let [[file-path content] (get-hook-input args)]
+  (let [[file-path content tool-name tool-input] (get-hook-input args)]
     (when (or (nil? file-path) (nil? content))
       (block-hook "Could not parse hook input"))
 
@@ -427,7 +440,7 @@
       (if-let [fixed (validator/auto-fix-brackets content)]
         (do (when-let [session-id (System/getenv "SESSION_ID")]
               (backup/create-backup file-path session-id))
-            (allow-hook fixed))
+            (allow-hook tool-name tool-input fixed))
         (block-hook (str "Syntax error in " file-path ": "
                          (validator/format-error-message error file-path))))
       (do (when-let [session-id (System/getenv "SESSION_ID")]
@@ -437,27 +450,23 @@
 (defn handle-eval [args]
   (let [file-path (if (empty? args) (get-file-path-from-stdin) (first args))]
     (when (nil? file-path)
-      (block-hook "Could not get file path"))
+      (block-hook "PostToolUse" "Could not get file path"))
 
     (when-not (.exists (io/file file-path))
-      (block-hook (str "File not found: " file-path)))
+      (block-hook "PostToolUse" (str "File not found: " file-path)))
 
-    (let [content (slurp file-path)]
-      (when-let [error (validator/delimiter-error? content)]
-        (when-let [session-id (System/getenv "SESSION_ID")]
-          (backup/restore-backup session-id file-path))
-        (block-hook (str "Syntax error in " file-path ": " (:message error))))
-
-      (if-let [port (resolve-port nil file-path)]
-        (let [result (eval-file (resolve-host nil) port file-path {:hook true})]
-          (if (:has-error? result)
-            (json-exit {:continue true
-                        :decision "allow"
-                        :suppressOutput true
-                        :warning (str "Evaluation warning in " file-path ": "
-                                     (get-in result [:processed :ex] "Evaluation error"))} 0)
-            (allow-hook)))
-        (allow-hook)))))
+    ;; Evaluate file via nREPL if available
+    (if-let [port (resolve-port nil file-path)]
+      (let [result (eval-file (resolve-host nil) port file-path {:hook true})]
+        (if (:has-error? result)
+          (json-exit {:hookSpecificOutput
+                      {:hookEventName "PostToolUse"
+                       :permissionDecision "allow"
+                       :permissionDecisionReason (str "Evaluation error: "
+                                                      (get-in result [:processed :ex] "Unknown error"))}} 0)
+          (allow-hook "PostToolUse")))
+      ;; No nREPL available, just allow
+      (allow-hook "PostToolUse"))))
 
 (defn handle-install [args]
   (let [opts (cli/parse-opts args {:spec {:strict-eval {:coerce :boolean}

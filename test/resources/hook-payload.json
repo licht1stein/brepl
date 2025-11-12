@@ -1,0 +1,13 @@
+{
+  "session_id": "8788e595-2ee0-4aa5-83fe-e5a3c4b60bf3",
+  "transcript_path": "/home/mb/.claude/projects/-home-mb-Code-github-com-licht1stein-fluxy-link/8788e595-2ee0-4aa5-83fe-e5a3c4b60bf3.jsonl",
+  "cwd": "/home/mb/Code/github.com/licht1stein/fluxy.link",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/home/mb/Code/github.com/licht1stein/fluxy.link/components/basics/src/dev/tarka/basics/unit.clj",
+    "old_string": "(defn ?\n  \"A simple probe\"\n  [x & [getter-fn]]\n  (impl/? x getter-fn))",
+    "new_string": "(defn ?\n  \"A simple probe - test\"\n  [x & [getter-fn]]\n  (impl/? x getter-fn))"
+  }
+}

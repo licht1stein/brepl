@@ -9,16 +9,15 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
-    - name: Install Babashka
-      run: |
-        curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install
-        chmod +x install
-        sudo ./install
-        
-    - name: Run tests
-      run: bb test
+
+    - name: Install Nix
+      uses: cachix/install-nix-action@v27
+      with:
+        nix_path: nixpkgs=channel:nixos-unstable
+
+    - name: Run tests in Nix shell
+      run: nix-shell --run "bb test"

@@ -27,11 +27,12 @@
 (defn delimiter-error?
   "Parse content with edamame and return error info if delimiters are invalid.
    Returns nil if valid, or a map with error details if invalid.
-   Parses ALL forms to catch both missing and extra delimiters."
+   Parses ALL forms to catch both missing and extra delimiters.
+   Supports all Clojure reader macros (regex, deref, var-quote, etc.)."
   [content]
   (try
-    ;; Parse all forms, not just the first one
-    (edamame/parse-string-all content)
+    ;; Parse all forms with full reader macro support including reader conditionals
+    (edamame/parse-string-all content {:all true :read-cond :allow})
     nil
     (catch Exception e
       (let [msg (ex-message e)

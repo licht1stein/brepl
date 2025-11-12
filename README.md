@@ -61,7 +61,10 @@ The `brepl hook install` command creates or updates `.claude/settings.local.json
 - Validate and auto-fix brackets before every file edit
 - Evaluate changed Clojure files in your running REPL after edits
 - Provide immediate feedback on syntax and evaluation errors
-- Install the brepl skill that teaches Claude the heredoc pattern for reliable code evaluation
+- Install the brepl skill that teaches Claude:
+  - Heredoc pattern for reliable code evaluation
+  - `brepl parinfer --mode smart` for automatic bracket fixing
+  - Error recovery workflows
 
 This enables Claude to write Clojure code confidently without worrying about parentheses or missing REPL feedback.
 
@@ -188,7 +191,7 @@ brepl hook session-end <id>     # Cleanup session backups
 
 ### Skill Commands
 
-The brepl skill teaches Claude Code how to evaluate Clojure expressions reliably using the heredoc pattern (see [Heredoc Pattern](#heredoc-pattern-for-reliable-evaluation) below).
+The brepl skill teaches Claude Code how to evaluate Clojure expressions reliably using the heredoc pattern and how to fix bracket errors with parinfer (see [Heredoc Pattern](#heredoc-pattern-for-reliable-evaluation) below).
 
 ```bash
 brepl skill install             # Install brepl skill to .claude/skills/brepl
@@ -196,6 +199,35 @@ brepl skill uninstall           # Remove brepl skill
 ```
 
 **Note**: The skill is automatically installed when you run `brepl hook install`. Use `brepl skill install` only if you want to install the skill separately without hooks.
+
+**What the skill teaches Claude:**
+- Heredoc pattern for reliable code evaluation
+- Automatic bracket fixing using `brepl parinfer --mode smart`
+- In-place file fixing workflows
+- Error recovery patterns
+
+### Parinfer Integration
+
+Direct access to parinfer-rust for bracket fixing:
+
+```bash
+brepl parinfer [args...]        # Pass-through to parinfer-rust CLI
+```
+
+**Examples:**
+```bash
+# Fix brackets in an expression
+echo '(defn foo [' | brepl parinfer --mode smart
+# => (defn foo [])
+
+# Fix brackets in a file
+brepl parinfer --mode smart < src/broken.clj > /tmp/fixed.clj
+
+# See all parinfer options
+brepl parinfer --help
+```
+
+**Claude Code integration:** When the brepl skill is installed, Claude Code automatically uses `brepl parinfer` to fix bracket errors before evaluation, making Clojure development seamless.
 
 ### Basic Usage
 

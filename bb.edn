@@ -8,4 +8,38 @@
         :task (exec 'cognitect.test-runner.api/test)
         :exec-args {:dirs ["test"]}
         :org.babashka/cli {:coerce {:nses [:symbol]
-                                    :vars [:symbol]}}}}}
+                                    :vars [:symbol]}}}
+
+  version-bump {:doc "Bump version (major|minor|patch)"
+                :task (let [bump-type (first *command-line-args*)
+                            _ (when-not (contains? #{"major" "minor" "patch"} bump-type)
+                                (println "Usage: bb version-bump {major|minor|patch}")
+                                (System/exit 1))
+
+                            ;; Read current version from brepl file
+                            brepl-content (slurp "brepl")
+                            current-version (re-find (re-pattern "\\d+\\.\\d+\\.\\d+") brepl-content)
+                            [major minor patch] (mapv parse-long (clojure.string/split current-version (re-pattern "\\.")))
+
+                            ;; Calculate new version
+                            [new-major new-minor new-patch]
+                            (case bump-type
+                              "major" [(inc major) 0 0]
+                              "minor" [major (inc minor) 0]
+                              "patch" [major minor (inc patch)])
+
+                            new-version (str new-major "." new-minor "." new-patch)
+
+                            ;; Update all files by replacing version pattern
+                            files ["brepl" "package.nix" "README.md"]]
+
+                        (println "Current version:" current-version)
+                        (println "New version:" new-version)
+
+                        (doseq [file files]
+                          (let [content (slurp file)
+                                updated (clojure.string/replace content current-version new-version)]
+                            (spit file updated)
+                            (println "Updated" file)))
+
+                        (println "\nVersion bumped to" new-version))}}}

@@ -32,7 +32,10 @@
   [content]
   (try
     ;; Parse all forms with full reader macro support including reader conditionals
-    (edamame/parse-string-all content {:all true :read-cond :allow})
+    ;; Use :auto-resolve identity to accept :: keywords as valid syntax
+    (edamame/parse-string-all content {:all true
+                                       :read-cond :allow
+                                       :auto-resolve identity})
     nil
     (catch Exception e
       (let [msg (ex-message e)

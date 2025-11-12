@@ -16,3 +16,62 @@ Use `@/openspec/AGENTS.md` to learn:
 Keep this managed block so 'openspec update' can refresh the instructions.
 
 <!-- OPENSPEC:END -->
+
+## Version Management
+
+### Bumping Versions
+
+Use the `bb version-bump` task to update version across all files:
+
+```bash
+bb version-bump patch   # 2.1.0 -> 2.1.1
+bb version-bump minor   # 2.1.0 -> 2.2.0
+bb version-bump major   # 2.1.0 -> 3.0.0
+```
+
+This automatically updates:
+- `brepl` - main script version string
+- `package.nix` - Nix derivation version
+- `README.md` - installation example version
+
+### Release Procedure
+
+When merging a PR that requires a new release:
+
+1. **Merge PR to master**
+   ```bash
+   gh pr merge <number> --squash
+   ```
+
+2. **Pull latest master**
+   ```bash
+   git checkout master && git pull
+   ```
+
+3. **Tag the release**
+   ```bash
+   git tag v2.1.1
+   git push github v2.1.1
+   ```
+
+4. **Update Nix hash** (after tag is pushed)
+   ```bash
+   nix-prefetch-github licht1stein brepl --rev v2.1.1
+   ```
+
+5. **Update README.md with new hash**
+   - Replace the `hash` value in the installation example with output from step 4
+   - Commit and push:
+   ```bash
+   git add README.md
+   git commit -m "Update Nix hash for v2.1.1 release"
+   git push
+   ```
+
+### Version Numbering
+
+- **Patch** (x.y.Z): Bug fixes, no breaking changes
+- **Minor** (x.Y.0): New features, may include breaking changes
+- **Major** (X.0.0): Major rewrites or significant API changes
+
+Note: This project uses a modified semver where breaking changes increment minor version, not major.

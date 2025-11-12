@@ -3,6 +3,7 @@
   (:require [babashka.cli :as cli]
             [clojure.java.io :as io]
             [babashka.fs :as fs]
+            [babashka.process :as process]
             [clojure.string :as str]
             [bencode.core :as bencode]
             [clojure.pprint :as pp]
@@ -11,7 +12,7 @@
   (:import [java.net Socket]
            [java.io PushbackInputStream]))
 
-(def version "2.0.3")
+(def version "2.1.0")
 
 ;; Load lib files and require namespaces
 (let [script-dir (some-> (System/getProperty "babashka.file")
@@ -56,6 +57,8 @@
   (println "    brepl [OPTIONS] -f <file>")
   (println "    brepl [OPTIONS] -m <message>")
   (println "    brepl hook <subcommand> [args]")
+  (println "    brepl skill <subcommand>")
+  (println "    brepl parinfer [args...]")
   (println)
   (println "OPTIONS:")
   (println (cli/format-opts {:spec cli-spec :order [:e :f :m :h :p :verbose :version :help]}))
@@ -500,6 +503,21 @@
     (do (backup/cleanup-session (first args))
         (System/exit 0))))
 
+(defn handle-skill-install [_args]
+  (let [result (installer/install-skill)]
+    (if (:success result)
+      (do (println "Installing brepl skill...")
+          (println (:message result))
+          (System/exit 0))
+      (do (println "Error:" (:message result))
+          (System/exit 1)))))
+
+(defn handle-skill-uninstall [_args]
+  (let [result (installer/uninstall-skill)]
+    (println "Removing brepl skill...")
+    (println (:message result))
+    (System/exit 0)))
+
 (defn show-hook-help [subcommand]
   (println "brepl hook - Claude Code integration commands")
   (println)
@@ -520,6 +538,26 @@
                         (not (contains? #{"validate" "eval" "install" "uninstall" "session-end"} subcommand)))
                  1 0)))
 
+(defn show-skill-help [subcommand]
+  (println "brepl skill - Claude Code skill management")
+  (println)
+  (println "USAGE:")
+  (println "    brepl skill install")
+  (println "    brepl skill uninstall")
+  (println)
+  (println "SUBCOMMANDS:")
+  (println "    install        Install brepl skill to .claude/skills/brepl")
+  (println "    uninstall      Remove brepl skill from .claude/skills/brepl")
+  (System/exit (if (and subcommand
+                        (not (contains? #{"install" "uninstall"} subcommand)))
+                 1 0)))
+
+(defn handle-skill-subcommand [subcommand args]
+  (case subcommand
+    "install"   (handle-skill-install args)
+    "uninstall" (handle-skill-uninstall args)
+    (show-skill-help subcommand)))
+
 (defn handle-hook-subcommand [subcommand args]
   (case subcommand
     "validate"    (handle-validate args)
@@ -538,8 +576,42 @@
           remaining-args (rest args)]
       (handle-hook-subcommand subcommand remaining-args))))
 
+(defn -main-skill
+  "Handle brepl skill subcommands"
+  [args]
+  (if (empty? args)
+    (handle-skill-subcommand nil nil)
+    (let [subcommand (first args)
+          remaining-args (rest args)]
+      (handle-skill-subcommand subcommand remaining-args))))
+
+(defn -main-parinfer
+  "Pass-through to parinfer-rust CLI"
+  [args]
+  (if (fs/which "parinfer-rust")
+    (let [proc (process/process (cons "parinfer-rust" args)
+                                {:inherit true})]
+      (System/exit (:exit @proc)))
+    (do
+      (println "Error: parinfer-rust not found in PATH")
+      (println "Install parinfer-rust to use this command:")
+      (println "  brew install parinfer-rust  # macOS")
+      (println "  nix-env -iA nixpkgs.parinfer-rust  # Nix")
+      (System/exit 1))))
+
 (when (= *file* (System/getProperty "babashka.file"))
-  (if (and (> (count *command-line-args*) 0)
-           (= "hook" (first *command-line-args*)))
+  (cond
+    (and (> (count *command-line-args*) 0)
+         (= "hook" (first *command-line-args*)))
     (-main-hook (rest *command-line-args*))
+
+    (and (> (count *command-line-args*) 0)
+         (= "skill" (first *command-line-args*)))
+    (-main-skill (rest *command-line-args*))
+
+    (and (> (count *command-line-args*) 0)
+         (= "parinfer" (first *command-line-args*)))
+    (-main-parinfer (rest *command-line-args*))
+
+    :else
     (apply -main *command-line-args*)))

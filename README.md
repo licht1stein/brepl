@@ -61,6 +61,10 @@ The `brepl hook install` command creates or updates `.claude/settings.local.json
 - Validate and auto-fix brackets before every file edit
 - Evaluate changed Clojure files in your running REPL after edits
 - Provide immediate feedback on syntax and evaluation errors
+- Install the brepl skill that teaches Claude:
+  - Heredoc pattern for reliable code evaluation
+  - `brepl parinfer --mode smart` for automatic bracket fixing
+  - Error recovery workflows
 
 This enables Claude to write Clojure code confidently without worrying about parentheses or missing REPL feedback.
 
@@ -137,8 +141,8 @@ let
   brepl = pkgs.callPackage (pkgs.fetchFromGitHub {
     owner = "licht1stein";
     repo = "brepl";
-    rev = "v2.0.3";
-    hash = "sha256-Pdrr9TKU0IFnhRoGqDGNSnuyp1aR/ey5W2VisqcP4w0=";
+    rev = "v2.1.0";
+    hash = ""; # Update after release
   } + "/package.nix") {};
 in
 pkgs.mkShell {
@@ -178,12 +182,52 @@ ln -s $(pwd)/brepl ~/.local/bin/brepl
 ### Hook Subcommands
 
 ```bash
-brepl hook install              # Install hooks to .claude/settings.local.json
+brepl hook install              # Install hooks to .claude/settings.local.json (includes skill)
 brepl hook uninstall            # Remove hooks
 brepl hook validate <file> <content>  # Pre-edit validation with auto-fix
 brepl hook eval <file>          # Post-edit evaluation
 brepl hook session-end <id>     # Cleanup session backups
 ```
+
+### Skill Commands
+
+The brepl skill teaches Claude Code how to evaluate Clojure expressions reliably using the heredoc pattern and how to fix bracket errors with parinfer (see [Heredoc Pattern](#heredoc-pattern-for-reliable-evaluation) below).
+
+```bash
+brepl skill install             # Install brepl skill to .claude/skills/brepl
+brepl skill uninstall           # Remove brepl skill
+```
+
+**Note**: The skill is automatically installed when you run `brepl hook install`. Use `brepl skill install` only if you want to install the skill separately without hooks.
+
+**What the skill teaches Claude:**
+- Heredoc pattern for reliable code evaluation
+- Automatic bracket fixing using `brepl parinfer --mode smart`
+- In-place file fixing workflows
+- Error recovery patterns
+
+### Parinfer Integration
+
+Direct access to parinfer-rust for bracket fixing:
+
+```bash
+brepl parinfer [args...]        # Pass-through to parinfer-rust CLI
+```
+
+**Examples:**
+```bash
+# Fix brackets in an expression
+echo '(defn foo [' | brepl parinfer --mode smart
+# => (defn foo [])
+
+# Fix brackets in a file
+brepl parinfer --mode smart < src/broken.clj > /tmp/fixed.clj
+
+# See all parinfer options
+brepl parinfer --help
+```
+
+**Claude Code integration:** When the brepl skill is installed, Claude Code automatically uses `brepl parinfer` to fix bracket errors before evaluation, making Clojure development seamless.
 
 ### Basic Usage
 
@@ -197,6 +241,55 @@ brepl -f script.clj
 # Use single quotes to avoid escaping double quotes
 brepl -e '(println "Hello, World!")'
 ```
+
+### Heredoc Pattern for Reliable Evaluation
+
+For AI agents (and humans) working with Clojure code that contains complex quoting, multi-line expressions, or nested structures, the heredoc pattern provides a consistent, foolproof approach to evaluation:
+
+```bash
+# Standard heredoc pattern - works for all cases
+brepl -e "$(cat <<'EOF'
+(require '[clojure.string :as str])
+(str/join ", " ["a" "b" "c"])
+EOF
+)"
+```
+
+**Why use heredoc?**
+- **No quoting issues**: Everything between `<<'EOF'` and `EOF` is treated as literal input
+- **Consistent pattern**: One approach for all evaluations, from simple to complex
+- **Multi-line friendly**: Natural formatting for readable code
+- **Easy to extend**: Add more forms without changing syntax
+
+**Examples:**
+
+```bash
+# Multi-line expressions with complex quoting
+brepl -e "$(cat <<'EOF'
+(println "String with 'single' and \"double\" quotes")
+(+ 10 20)
+EOF
+)"
+
+# Namespace reloading and testing
+brepl -e "$(cat <<'EOF'
+(require '[myapp.core] :reload)
+(myapp.core/some-function "test" 123)
+EOF
+)"
+
+# Data structures with nested quotes
+brepl -e "$(cat <<'EOF'
+(def config
+  {:database {:host "localhost"
+              :port 5432}
+   :api {:key "secret-key"}})
+(println (:database config))
+EOF
+)"
+```
+
+**Note**: Always use `<<'EOF'` (with single quotes) to prevent shell variable expansion. The brepl skill (installed via `brepl hook install`) teaches Claude Code to use this pattern automatically.
 
 ### Port Configuration
 

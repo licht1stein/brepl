@@ -255,7 +255,7 @@
   (testing "Help display"
     (let [result (run-brepl "--help")]
       (is (= 0 (:exit result)))
-      (is (str/includes? (:out result) "brepl - Fast Babashka nREPL client"))
+      (is (str/includes? (:out result) "brepl - Bracket-fixing REPL"))
       (is (str/includes? (:out result) "USAGE:"))
       (is (str/includes? (:out result) "OPTIONS:"))))
 

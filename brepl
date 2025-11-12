@@ -11,7 +11,7 @@
   (:import [java.net Socket]
            [java.io PushbackInputStream]))
 
-(def version "2.0.2")
+(def version "2.0.3")
 
 ;; Load lib files and require namespaces
 (let [script-dir (some-> (System/getProperty "babashka.file")
@@ -45,6 +45,9 @@
           :alias :?}
    :hook {:desc "Output Claude Code hook-compatible JSON format"}})
 
+(defn parinfer-available? []
+  (some? (fs/which "parinfer-rust")))
+
 (defn print-help []
   (println "brepl - Bracket-fixing REPL")
   (println)
@@ -65,6 +68,11 @@
   (println "       - For -e/-m: uses .nrepl-port in current directory")
   (println "    3. BREPL_PORT environment variable")
   (println "    4. Error if none found")
+  (println)
+  (println "FEATURES:")
+  (if (parinfer-available?)
+    (println "    parinfer-rust: \u001b[32mavailable (auto-fix mode)\u001b[0m")
+    (println "    parinfer-rust: not found (prevention mode)"))
   (println)
   (println "EXAMPLES:")
   (println "    brepl -e '(+ 1 2 3)'")
@@ -110,10 +118,10 @@
 (defn resolve-host [cli-host]
   (or cli-host (get-env-var "BREPL_HOST") "localhost"))
 
-(defn resolve-port 
+(defn resolve-port
   "Resolve the nREPL port from various sources.
   Priority: CLI arg > .nrepl-port file > BREPL_PORT env var
-  When file-path is provided (for -f option), searches for .nrepl-port 
+  When file-path is provided (for -f option), searches for .nrepl-port
   starting from the file's directory and walking up the tree."
   ([cli-port] (resolve-port cli-port nil))
   ([cli-port file-path]
@@ -391,7 +399,7 @@
   ([tool-name tool-input fixed-content]
    (let [updated-input (case tool-name
                          "Edit" (assoc tool-input :new_string fixed-content)
-                         ("Write" "Update") (assoc tool-input :content fixed-content)
+                         "Write" (assoc tool-input :content fixed-content)
                          tool-input)]
      (json-exit {:hookSpecificOutput
                  {:hookEventName "PreToolUse"
@@ -420,7 +428,6 @@
         (debug-log (str "Hook called - Tool: " tool_name " File: " file_path))
         (case tool_name
           "Write"  [file_path content tool_name tool_input]
-          "Update" [file_path content tool_name tool_input]
           ;; For Edit: validate just the replacement text (new_string), not the full file
           "Edit"   [file_path new_string tool_name tool_input]
           [nil nil nil nil]))

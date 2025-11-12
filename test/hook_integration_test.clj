@@ -38,14 +38,6 @@
    :tool_input {:file_path file-path
                 :content content}})
 
-(defn create-update-payload
-  "Create Update tool hook payload matching Claude Code structure"
-  [file-path content]
-  {:hook_event_name "PreToolUse"
-   :tool_name "Update"
-   :tool_input {:file_path file-path
-                :content content}})
-
 ;; Integration tests
 
 (deftest validate-hook-edit-with-valid-code-test
@@ -168,63 +160,6 @@
                   "Should use permissionDecision field")
               (is (nil? (get-in result [:response :hookSpecificOutput :updatedInput]))
                   "Should not provide updatedInput for non-Clojure files"))))
-
-        (finally
-          (.delete temp-file))))))
-
-(deftest validate-hook-update-with-valid-code-test
-  (testing "Scenario: Update hook receives valid Clojure code via stdin"
-    (let [temp-file (java.io.File/createTempFile "test-update-valid-" ".clj")]
-      (try
-        (testing "Given a Clojure file"
-          (spit temp-file "(defn old [] 1)")
-          (is (.exists temp-file)))
-
-        (testing "When Claude sends Update payload with valid new code via stdin"
-          (let [payload (create-update-payload
-                         (.getAbsolutePath temp-file)
-                         "(defn new [] 2)")
-                result (run-hook-via-stdin "validate" payload)]
-
-            (testing "Then hook returns allow decision in correct format"
-              (is (= 0 (:exit result))
-                  "Should exit with code 0")
-              (is (= "allow" (get-in result [:response :hookSpecificOutput :permissionDecision]))
-                  "Should use permissionDecision field")
-              (is (nil? (get-in result [:response :hookSpecificOutput :updatedInput]))
-                  "Should not include updatedInput for valid code"))))
-
-        (finally
-          (.delete temp-file))))))
-
-(deftest validate-hook-update-with-syntax-error-test
-  (testing "Scenario: Update hook receives code with syntax error via stdin"
-    (let [temp-file (java.io.File/createTempFile "test-update-error-" ".clj")]
-      (try
-        (testing "Given a Clojure file"
-          (spit temp-file "(defn old [] 1)")
-          (is (.exists temp-file)))
-
-        (testing "When Claude sends Update payload with missing closing paren via stdin"
-          (let [payload (create-update-payload
-                         (.getAbsolutePath temp-file)
-                         "(defn new [] (+ 1 2)")
-                result (run-hook-via-stdin "validate" payload)]
-
-            (testing "Then hook returns allow with complete tool_input and correction"
-              (is (= 0 (:exit result))
-                  "Should exit with code 0")
-              (is (= "allow" (get-in result [:response :hookSpecificOutput :permissionDecision]))
-                  "Should use permissionDecision field")
-
-              (testing "And updatedInput includes ALL tool_input fields"
-                (is (= (.getAbsolutePath temp-file) (get-in result [:response :hookSpecificOutput :updatedInput :file_path]))
-                    "Should include file_path")
-                (is (= "(defn new [] (+ 1 2))" (get-in result [:response :hookSpecificOutput :updatedInput :content]))
-                    "Should provide corrected content for Update tool"))
-
-              (is (= "Auto-fixed bracket errors" (get-in result [:response :hookSpecificOutput :permissionDecisionReason]))
-                  "Should include reason for auto-fix"))))
 
         (finally
           (.delete temp-file))))))

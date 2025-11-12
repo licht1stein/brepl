@@ -118,3 +118,119 @@
         (testing "And the validator should skip validation"
           (is (true? true)
               "Non-Clojure files are handled by checking clojure-file? first"))))))
+
+(deftest validate-hook-with-reader-macros-test
+  (testing "Scenario: Validate hook handles all Clojure reader macros"
+    (testing "Given code with various reader macros"
+
+      (testing "Tagged literals"
+        (let [content "#inst \"2025-01-01\""]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept #inst tagged literal"))
+        (let [content "#uuid \"00000000-0000-0000-0000-000000000000\""]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept #uuid tagged literal")))
+
+      (testing "Regex patterns"
+        (let [content "#\"[a-z]+\""]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept regex literal"))
+        (let [content "(re-find #\"\\d+\" \"abc123\")"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept regex in function call")))
+
+      (testing "Deref macro"
+        (let [content "@my-atom"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept deref"))
+        (let [content "(reset! my-atom @other-atom)"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept deref in expression")))
+
+      (testing "Var-quote"
+        (let [content "#'my-var"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept var-quote"))
+        (let [content "(alter-var-root #'my-var inc)"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept var-quote in function call")))
+
+      (testing "Quote and syntax-quote"
+        (let [content "'(1 2 3)"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept quote"))
+        (let [content "`(def ~x ~y)"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept syntax-quote with unquote"))
+        (let [content "`(list ~@items)"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept unquote-splicing")))
+
+      (testing "Metadata"
+        (let [content "^{:private true} (def x 1)"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept map metadata"))
+        (let [content "^:private (def x 1)"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept keyword metadata"))
+        (let [content "^String x"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept type metadata")))
+
+      (testing "Discard/comment macro"
+        (let [content "#_(println \"debug\") :result"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept discard macro"))
+        (let [content "(def x #_old-value 42)"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept inline discard")))
+
+      (testing "Set literals"
+        (let [content "#{1 2 3}"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept set literal"))
+        (let [content "(contains? #{:a :b :c} :a)"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept set in expression")))
+
+      (testing "Anonymous functions"
+        (let [content "#(+ % 1)"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept anonymous function"))
+        (let [content "(map #(* %1 %2) xs ys)"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept multi-arg anonymous function")))
+
+      (testing "Reader conditionals"
+        (let [content "#?(:clj \"jvm\" :cljs \"js\")"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept reader conditional"))
+        (let [content "#?@(:clj [1 2] :cljs [3 4])"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept splicing reader conditional")))
+
+      (testing "Symbolic values"
+        (let [content "##Inf"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept positive infinity"))
+        (let [content "##-Inf"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept negative infinity"))
+        (let [content "##NaN"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept NaN")))
+
+      (testing "Combined reader macros in realistic code"
+        (let [content "(defn process
+  \"Process data with metadata\"
+  {:added \"1.0\" :private true}
+  [^String input]
+  (let [pattern #\"[a-z]+\"
+        data @state-atom
+        timestamp #inst \"2025-01-01\"
+        set-data #{1 2 3}]
+    #_(println \"debug:\") ; discard
+    (map #(str/upper-case %)
+         (re-seq pattern input))))"]
+          (is (nil? (sut/delimiter-error? content))
+              "Should accept complex code with multiple reader macros"))))))

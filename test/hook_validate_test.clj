@@ -234,3 +234,41 @@
          (re-seq pattern input))))"]
           (is (nil? (sut/delimiter-error? content))
               "Should accept complex code with multiple reader macros"))))))
+
+(deftest validate-hook-with-auto-resolved-keywords-test
+  (testing "Scenario: Validate hook handles auto-resolved keywords as valid syntax"
+    (testing "Given code with auto-resolved keywords (::keyword)"
+
+      (testing "Simple auto-resolved keyword"
+        (let [content "::init"]
+          (is (nil? (sut/delimiter-error? content))
+              "Auto-resolved keywords are valid Clojure syntax")))
+
+      (testing "Auto-resolved keyword in function call"
+        (let [content "(println ::init)"]
+          (is (nil? (sut/delimiter-error? content))
+              "Auto-resolved keywords in expressions are valid")))
+
+      (testing "Auto-resolved keyword in map"
+        (let [content "{::status :running ::count 42}"]
+          (is (nil? (sut/delimiter-error? content))
+              "Auto-resolved keywords in maps are valid")))
+
+      (testing "Multiple auto-resolved keywords in realistic code"
+        (let [content "(defmethod ig/init-key :site/svc [_ opts]
+  (println ::init)
+  opts)
+
+(defmethod ig/halt-key! :site/svc [_ _]
+  (println ::halt))"]
+          (is (nil? (sut/delimiter-error? content))
+              "Auto-resolved keywords in methods are valid syntax")))
+
+      (testing "Mixed qualified and auto-resolved keywords"
+        (let [content "(defn process [data]
+  {:db/id 123
+   ::local-key \"value\"
+   :other/qualified \"data\"
+   ::another-key 456})"]
+          (is (nil? (sut/delimiter-error? content))
+              "Mixing qualified and auto-resolved keywords is valid"))))))

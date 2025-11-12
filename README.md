@@ -3,15 +3,19 @@
 [![GitHub release](https://img.shields.io/github/v/release/licht1stein/brepl?label=version)](https://github.com/licht1stein/brepl/releases/latest)
 [![Run Tests](https://github.com/licht1stein/brepl/actions/workflows/test.yml/badge.svg)](https://github.com/licht1stein/brepl/actions/workflows/test.yml)
 
-Lightweight REPL-driven development for Clojure with AI coding agents.
+**B**racket-fixing **REPL** for AI-assisted Clojure development.
 
 ## What is brepl?
 
-brepl enables AI-assisted Clojure development using your existing nREPL connection and Babashka's built-in parser. Integrates with [parinfer-rust](https://github.com/eraserhd/parinfer-rust) for automatic bracket fixing when available.
+**brepl** (Bracket-fixing REPL) enables AI-assisted Clojure development by solving the notorious parenthesis problem. It provides three essential capabilities for AI agents:
 
-**Primary use case:** AI coding agents that automatically validate syntax, fix bracket errors, and keep your REPL synchronized with code changes.
+1. **🔧 Automatic bracket fixing** - Intelligently corrects mismatched parentheses, brackets, and braces using [parinfer-rust](https://github.com/eraserhd/parinfer-rust) when available
+2. **⚡ Simple REPL evaluation** - Gives AI agents a straightforward way to evaluate code in your running REPL, enabling truly interactive development
+3. **🔄 Live file synchronization** - Automatically evaluates edited files in the REPL, providing early feedback on evaluation errors before they become problems
 
-**Also works as:** Fast command-line nREPL client for one-shot evaluations, scripts, and automation.
+**Primary use case:** AI coding agents that need reliable Clojure syntax handling and immediate REPL feedback.
+
+**Versatile tool:** While designed for AI workflows, brepl is equally capable as a lightweight CLI nREPL client for one-shot evaluations, scripts, and automation—making it useful for both AI-assisted and traditional development workflows.
 
 ### Bracket Auto-Fix
 
@@ -80,26 +84,34 @@ brepl -f script.clj
 
 ## Features
 
-### AI-Assisted Development (v2.0.2)
-- 🤖 **Automatic syntax validation** - Pre-edit checking using Babashka's edamame parser
-- 🔧 **Intelligent bracket auto-fix** - Uses parinfer-rust when available, detailed errors otherwise
-- 💾 **Session-based backups** - Automatic backup/restore on errors
-- 🔄 **REPL synchronization** - Evaluates file changes through your running nREPL
-- 📦 **One-command setup** - `brepl hook install` in any project
-- ⚡ **Project-aware** - Handles multiple REPLs via port discovery
-- 🎯 **Graceful degradation** - Works with or without parinfer-rust
+### Core Capabilities for AI-Assisted Development
 
-### nREPL Client Features
-- 🚀 **Fast startup** - Built with Babashka for instant execution
-- 💬 **Full nREPL protocol** - Access any nREPL operation, not just evaluation
-- 📝 **Expression evaluation** - Evaluate Clojure expressions from command line
-- 📁 **File loading** - Load and execute entire Clojure files
-- 🔍 **Auto-discovery** - Automatically detects `.nrepl-port` files
-- 📂 **Project-aware** (v1.3.0) - Finds `.nrepl-port` by walking up from file's directory
+#### 🔧 Bracket Fixing
+- **Intelligent auto-correction** - Uses parinfer-rust when available to fix mismatched delimiters
+- **Detailed error reporting** - When auto-fix isn't possible, provides clear syntax errors for AI agents
+- **Pre-edit validation** - Catches bracket problems before they're written to files
+- **Graceful degradation** - Works with or without parinfer-rust installed
+
+#### ⚡ Simple REPL Evaluation
+- **Direct nREPL integration** - AI agents can evaluate code in your running REPL with simple commands
+- **Project-aware discovery** - Automatically finds the right REPL for each file (v1.3.0)
+- **Full protocol support** - Access any nREPL operation, not just evaluation
+- **Fast Babashka runtime** - Instant startup for responsive AI interactions
+
+#### 🔄 Live File Synchronization
+- **Automatic evaluation** - Files are evaluated in REPL immediately after editing
+- **Early error feedback** - AI agents see evaluation errors right away, not later
+- **Session-based backups** - Automatic backup/restore protects against bad edits
+- **One-command setup** - `brepl hook install` enables everything in seconds
+
+### Versatile CLI Client
+- 🚀 **Fast command-line evaluation** - Quick one-liners with `brepl -e '(+ 1 2)'`
+- 📁 **File loading** - Execute entire Clojure files with `brepl -f script.clj`
+- 💬 **Raw nREPL messages** - Send any protocol message for advanced operations
+- 🔍 **Smart port discovery** - Automatically detects `.nrepl-port` files
 - ⚙️ **Flexible configuration** - Environment variables and CLI arguments
 - 🐛 **Proper error handling** - Shows exceptions and stack traces
 - 📊 **Verbose mode** - Debug nREPL communication with `--verbose`
-- 🎯 **One-shot design** - Perfect for scripts and automation
 
 ## Installation
 

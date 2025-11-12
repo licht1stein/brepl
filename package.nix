@@ -30,13 +30,14 @@ stdenv.mkDerivation rec {
   '';
 
   meta = with lib; {
-    description = "Lightweight REPL-driven development for Clojure with AI coding agents";
+    description = "Bracket-fixing REPL for AI-assisted Clojure development";
     longDescription = ''
-      brepl enables AI-assisted Clojure development using your existing nREPL
-      connection and Babashka's built-in parser. Provides automatic syntax
-      validation, bracket auto-fix, and REPL synchronization with zero external
-      dependencies. Also works as a fast nREPL client for command-line evaluations,
-      file loading, and scripting workflows.
+      brepl (Bracket-fixing REPL) enables AI-assisted Clojure development by solving
+      the notorious parenthesis problem. It validates syntax using Babashka's built-in
+      parser and intelligently fixes bracket errors with parinfer-rust—because AI agents
+      shouldn't struggle with Lisp parentheses. Provides automatic syntax validation,
+      bracket auto-fix, and REPL synchronization. Also works as a fast nREPL client for
+      command-line evaluations, file loading, and scripting workflows.
     '';
     homepage = "https://github.com/licht1stein/brepl";
     changelog = "https://github.com/licht1stein/brepl/releases/tag/v${version}";

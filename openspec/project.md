@@ -1,7 +1,7 @@
 # Project Context
 
 ## Purpose
-brepl is a fast, lightweight nREPL client built with Babashka for one-shot interactions with any nREPL server. It enables:
+brepl (Bracket-fixing REPL) is a fast nREPL client built with Babashka that solves the parenthesis problem for AI-assisted Clojure development. It enables:
 - Quick evaluation of Clojure expressions from the command line
 - Loading and executing Clojure files in a running REPL
 - Sending raw nREPL protocol messages for advanced operations

@@ -32,11 +32,11 @@
 (defn brepl-hook-config
   "Generate brepl hook configuration for Claude Code."
   [opts]
-  {:PreToolUse [{:matcher "Edit|Write|Update"
+  {:PreToolUse [{:matcher "Edit|Write"
                  :hooks [{:type "command"
                           :command "brepl hook validate"
                           :continueOnError false}]}]
-   :PostToolUse [{:matcher "Edit|Write|Update"
+   :PostToolUse [{:matcher "Edit|Write"
                   :hooks [{:type "command"
                            :command "brepl hook eval"
                            :continueOnError (not (:strict-eval opts))}]}]

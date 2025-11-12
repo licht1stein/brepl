@@ -46,7 +46,7 @@
    :hook {:desc "Output Claude Code hook-compatible JSON format"}})
 
 (defn print-help []
-  (println "brepl - Bracket-fixing REPL for AI-assisted Clojure development")
+  (println "brepl - Bracket-fixing REPL")
   (println)
   (println "USAGE:")
   (println "    brepl [OPTIONS] -e <expr>")

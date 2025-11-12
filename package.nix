@@ -30,7 +30,7 @@ stdenv.mkDerivation rec {
   '';
 
   meta = with lib; {
-    description = "Bracket-fixing REPL for AI-assisted Clojure development";
+    description = "Bracket-fixing REPL";
     longDescription = ''
       brepl (Bracket-fixing REPL) enables AI-assisted Clojure development by solving
       the notorious parenthesis problem. It validates syntax using Babashka's built-in

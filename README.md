@@ -3,7 +3,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/licht1stein/brepl?label=version)](https://github.com/licht1stein/brepl/releases/latest)
 [![Run Tests](https://github.com/licht1stein/brepl/actions/workflows/test.yml/badge.svg)](https://github.com/licht1stein/brepl/actions/workflows/test.yml)
 
-**B**racket-fixing **REPL** for AI-assisted Clojure development.
+**B**racket-fixing **REPL** for Claude Code and other AI-assisted Clojure development.
 
 ## What is brepl?
 

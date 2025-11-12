@@ -40,24 +40,19 @@ cd parinfer-rust && cargo install --path .
 
 ## Quick Start
 
-### For AI-Assisted Development
+### For AI-Assisted Development with Claude Code
 
-**Using bbin:**
+Assuming brepl is already installed (see [Installation](#installation)):
+
 ```bash
-# Install brepl
-bbin install io.github.licht1stein/brepl
-
-# Install parinfer-rust for auto-fix (optional but recommended)
-brew install parinfer-rust  # or see Bracket Auto-Fix section above
-
-# Start your nREPL
+# Start your nREPL server
 bb nrepl-server
 
-# Install hooks in your project for Claude Code
+# Install hooks and skill in your project
 brepl hook install
 ```
 
-The `brepl hook install` command creates or updates `.claude/settings.local.json` in your project, configuring Claude Code to:
+The `brepl hook install` command configures Claude Code to:
 - Validate and auto-fix brackets before every file edit
 - Evaluate changed Clojure files in your running REPL after edits
 - Provide immediate feedback on syntax and evaluation errors
@@ -66,31 +61,21 @@ The `brepl hook install` command creates or updates `.claude/settings.local.json
   - `brepl parinfer --mode smart` for automatic bracket fixing
   - Error recovery workflows
 
-This enables Claude to write Clojure code confidently without worrying about parentheses or missing REPL feedback.
-
-**Using Nix (includes parinfer-rust automatically):**
-```bash
-nix-env -iA nixpkgs.brepl
-
-# Or in a flake:
-{
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-  # ... in your packages:
-  brepl = pkgs.brepl;
-}
-```
-
-Now AI agents automatically validate and evaluate Clojure code changes through your running REPL.
+Now Claude can write Clojure code confidently without worrying about parentheses or missing REPL feedback.
 
 ### For Command-Line Usage
 
 ```bash
-# Evaluate expressions
+# Evaluate expressions (auto-detects .nrepl-port)
 brepl -e '(+ 1 2 3)'
 # => 6
 
-# Load files
+# Load and execute files
 brepl -f script.clj
+
+# Fix bracket errors with parinfer
+echo '(defn foo [' | brepl parinfer --mode smart
+# => (defn foo [])
 ```
 
 ## Features

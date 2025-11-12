@@ -84,12 +84,16 @@ echo '(defn foo [' | brepl parinfer --mode smart
 
 #### 🔧 Bracket Fixing
 - **Intelligent auto-correction** - Uses parinfer-rust when available to fix mismatched delimiters
+- **Error recovery** - When bracket errors occur, use `brepl parinfer --mode smart` to fix existing code
 - **Detailed error reporting** - When auto-fix isn't possible, provides clear syntax errors for AI agents
 - **Pre-edit validation** - Catches bracket problems before they're written to files
+- **In-place file fixing** - Fix brackets in files: `brepl parinfer --mode smart < file.clj > /tmp/fixed.clj && mv /tmp/fixed.clj file.clj`
 - **Graceful degradation** - Works with or without parinfer-rust installed
 
 #### ⚡ Simple REPL Evaluation
 - **Direct nREPL integration** - AI agents can evaluate code in your running REPL with simple commands
+- **Heredoc pattern** - Skill teaches reliable evaluation pattern that eliminates shell quoting issues
+- **Bracket error handling** - Automatically pipe through parinfer when evaluation fails due to bracket errors
 - **Project-aware discovery** - Automatically finds the right REPL for each file (v1.3.0)
 - **Full protocol support** - Access any nREPL operation, not just evaluation
 - **Fast Babashka runtime** - Instant startup for responsive AI interactions

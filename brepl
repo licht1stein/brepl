@@ -11,7 +11,7 @@
   (:import [java.net Socket]
            [java.io PushbackInputStream]))
 
-(def version "2.0.2")
+(def version "2.0.3")
 
 ;; Load lib files and require namespaces
 (let [script-dir (some-> (System/getProperty "babashka.file")
@@ -118,10 +118,10 @@
 (defn resolve-host [cli-host]
   (or cli-host (get-env-var "BREPL_HOST") "localhost"))
 
-(defn resolve-port 
+(defn resolve-port
   "Resolve the nREPL port from various sources.
   Priority: CLI arg > .nrepl-port file > BREPL_PORT env var
-  When file-path is provided (for -f option), searches for .nrepl-port 
+  When file-path is provided (for -f option), searches for .nrepl-port
   starting from the file's directory and walking up the tree."
   ([cli-port] (resolve-port cli-port nil))
   ([cli-port file-path]

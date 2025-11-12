@@ -574,20 +574,6 @@ brepl takes a pragmatic approach to AI-assisted Clojure development: use battle-
 
 Perfect for developers who want reliable AI assistance without managing multiple processes or protocol servers.
 
-#### Implementation Details
-
-See `BRACKET_AUTO_FIX_ANALYSIS.md` for detailed comparison with parinfer-rust showing **94.9% agreement** across 39 test cases. Both approaches:
-- Fix extra closing brackets by removing from end
-- Fix missing closing brackets by appending
-- Handle nested structures with multiple errors
-- Pragmatically fix "mismatched" delimiters as typos: `[1 2 3)` → `[1 2 3]`
-- Give up on genuinely complex errors (deeply nested mismatches, strings)
-
-**Known Limitations:**
-- Can't fix anonymous function reader macros: `#(+ % 1` (edamame parser limitation)
-- Multi-form with complex errors may fix only first form
-- These edge cases occur rarely and degrade gracefully with clear error messages
-
 ## Troubleshooting
 
 **Error: No port specified, no .nrepl-port file found, and BREPL_PORT not set**

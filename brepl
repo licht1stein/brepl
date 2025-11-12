@@ -380,6 +380,17 @@
         (str (java.time.LocalDateTime/now) " - " msg "\n")
         :append true))
 
+(defn save-hook-debug-json [tool-name hook-data]
+  (try
+    (let [timestamp (str (System/currentTimeMillis))
+          debug-dir "./tmp/hooks-requests"
+          filename (str debug-dir "/" tool-name "-" timestamp ".json")]
+      (fs/create-dirs debug-dir)
+      (spit filename (json/generate-string hook-data {:pretty true}))
+      (debug-log (str "Saved debug JSON to: " filename)))
+    (catch Exception e
+      (debug-log (str "ERROR saving debug JSON: " (.getMessage e))))))
+
 (defn json-exit [response exit-code]
   (println (json/generate-string response))
   (System/exit exit-code))
@@ -426,12 +437,22 @@
   (if (>= (count args) 2)
     [(first args) (second args) nil nil]
     (try
-      (let [{:keys [tool_name tool_input]} (json/parse-stream *in* true)
+      (let [debug-mode? (some #(= "--debug" %) args)
+            ;; Read stdin as string if debug mode, otherwise use stream
+            hook-data (if debug-mode?
+                       (let [raw-input (slurp *in*)]
+                         (json/parse-string raw-input true))
+                       (json/parse-stream *in* true))
+            {:keys [tool_name tool_input]} hook-data
             {:keys [file_path content old_string new_string]} tool_input]
+
+        ;; Save debug JSON if debug mode
+        (when debug-mode?
+          (save-hook-debug-json tool_name hook-data))
+
         (debug-log (str "Hook called - Tool: " tool_name " File: " file_path))
         (case tool_name
           "Write"  [file_path content tool_name tool_input]
-          ;; For Edit: validate just the replacement text (new_string), not the full file
           "Edit"   [file_path new_string tool_name tool_input]
           [nil nil nil nil]))
       (catch Exception e
@@ -480,10 +501,13 @@
 
 (defn handle-install [args]
   (let [opts (cli/parse-opts args {:spec {:strict-eval {:coerce :boolean}
+                                           :debug {:coerce :boolean}
                                            :parinfer {:coerce :boolean}}})
         status (installer/check-status)]
     (installer/install-hooks opts)
     (println "Installing Claude Code hooks...")
+    (when (:debug opts)
+      (println "Debug mode enabled - hook JSON will be saved to ./tmp/hooks-requests/"))
     (println "Hooks installed successfully.")
     (println)
     (when (:installed status)
@@ -522,9 +546,9 @@
   (println "brepl hook - Claude Code integration commands")
   (println)
   (println "USAGE:")
-  (println "    brepl hook validate <file> <content>")
-  (println "    brepl hook eval <file>")
-  (println "    brepl hook install [--strict-eval] [--parinfer]")
+  (println "    brepl hook validate [--debug] <file> <content>")
+  (println "    brepl hook eval [--debug] <file>")
+  (println "    brepl hook install [--strict-eval] [--debug]")
   (println "    brepl hook uninstall")
   (println "    brepl hook session-end <session-id>")
   (println)
@@ -534,6 +558,10 @@
   (println "    install        Install hooks in .claude/settings.local.json")
   (println "    uninstall      Remove hooks from .claude/settings.local.json")
   (println "    session-end    Clean up session backup files")
+  (println)
+  (println "FLAGS:")
+  (println "    --debug        Save hook JSON input to ./tmp/hooks-requests/")
+  (println "    --strict-eval  Exit with error on eval failures (install only)")
   (System/exit (if (and subcommand
                         (not (contains? #{"validate" "eval" "install" "uninstall" "session-end"} subcommand)))
                  1 0)))

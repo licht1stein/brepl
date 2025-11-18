@@ -1,6 +1,4 @@
-{:paths ["."]
- :deps {io.github.borkdude/parmezan {:git/sha "39a978daffc025aceeed6a8ea2acaabbba901154"}}
- :bbin/bin {brepl {:main-opts ["-f" "brepl"]}}
+{:bbin/bin {brepl {:main-opts ["-f" "brepl"]}}
  :tasks
  {test {:doc "Run test suite"
         :extra-paths ["test"]

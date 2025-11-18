@@ -40,6 +40,7 @@ brepl hook install
 ```
 
 The `brepl hook install` command configures Claude Code to:
+
 - Validate and auto-fix brackets before every file edit
 - Evaluate changed Clojure files in your running REPL after edits
 - Provide immediate feedback on syntax and evaluation errors
@@ -67,12 +68,14 @@ brepl -f script.clj
 ### Core Capabilities for AI-Assisted Development
 
 #### 🔧 Bracket Fixing
+
 - **Intelligent auto-correction** - Uses parmezan to fix mismatched delimiters automatically
 - **Pre-edit validation** - Catches and fixes bracket problems before they're written to files
 - **Detailed error reporting** - When auto-fix isn't possible, provides clear syntax errors for AI agents
 - **No external dependencies** - Pure Clojure solution, no binary installation required
 
 #### ⚡ Simple REPL Evaluation
+
 - **Direct nREPL integration** - AI agents can evaluate code in your running REPL with simple commands
 - **Heredoc pattern** - Skill teaches reliable evaluation pattern that eliminates shell quoting issues
 - **Automatic bracket correction** - Bracket errors are fixed automatically in hook mode
@@ -81,12 +84,14 @@ brepl -f script.clj
 - **Fast Babashka runtime** - Instant startup for responsive AI interactions
 
 #### 🔄 Live File Synchronization
+
 - **Automatic evaluation** - Files are evaluated in REPL immediately after editing
 - **Early error feedback** - AI agents see evaluation errors right away, not later
 - **Session-based backups** - Automatic backup/restore protects against bad edits
 - **One-command setup** - `brepl hook install` enables everything in seconds
 
 ### Versatile CLI Client
+
 - 🚀 **Fast command-line evaluation** - Quick one-liners with `brepl -e '(+ 1 2)'`
 - 📁 **File loading** - Execute entire Clojure files with `brepl -f script.clj`
 - 💬 **Raw nREPL messages** - Send any protocol message for advanced operations
@@ -113,7 +118,7 @@ let
     owner = "licht1stein";
     repo = "brepl";
     rev = "v2.2.0";
-    hash = "sha256-zJc4ljMZRkv4Ips1Z1Y+NB7MuGkRmzgKNnNsbhDuT2w=";
+    hash = "sha256-n9O8+3TeZi8yn9VGa7JCfIgCjQ5FmbiLTKWYQ3Zatd0=";
   } + "/package.nix") {};
 in
 pkgs.mkShell {
@@ -162,7 +167,6 @@ brepl hook session-end <id>     # Cleanup session backups
 
 ### Skill Commands
 
-
 ```bash
 brepl skill install             # Install brepl skill to .claude/skills/brepl
 brepl skill uninstall           # Remove brepl skill
@@ -171,16 +175,17 @@ brepl skill uninstall           # Remove brepl skill
 **Note**: The skill is automatically installed when you run `brepl hook install`. Use `brepl skill install` only if you want to install the skill separately without hooks.
 
 **What the skill teaches Claude:**
+
 - Heredoc pattern for reliable code evaluation
 - In-place file fixing workflows
 - Error recovery patterns
 
-
-
 ```bash
+
 ```
 
 **Examples:**
+
 ```bash
 # Fix brackets in an expression
 # => (defn foo [])
@@ -188,7 +193,6 @@ brepl skill uninstall           # Remove brepl skill
 # Fix brackets in a file
 
 ```
-
 
 ### Basic Usage
 
@@ -217,6 +221,7 @@ EOF
 ```
 
 **Why use heredoc?**
+
 - **No quoting issues**: Everything between `<<'EOF'` and `EOF` is treated as literal input
 - **Consistent pattern**: One approach for all evaluations, from simple to complex
 - **Multi-line friendly**: Natural formatting for readable code
@@ -300,6 +305,7 @@ brepl -f ~/projects/frontend/src/ui/core.cljs      # Connects to port 8000
 ```
 
 This is especially useful when:
+
 - Working with monorepos containing multiple services
 - Switching between different projects frequently
 - Using editor integrations that operate on individual files
@@ -324,6 +330,7 @@ export BREPL_PORT=7888       # Default port
 ```
 
 Or use them for one-off commands:
+
 ```bash
 BREPL_PORT=7888 brepl -e '(+ 1 2 3)'
 ```
@@ -338,7 +345,7 @@ bb nrepl-server
 brepl -e '(+ 1 2 3)'
 brepl -e '(require '[clojure.string :as str]) (str/upper-case "hello")'
 
-# Load a script file  
+# Load a script file
 brepl -f my-script.clj
 
 # Send raw nREPL messages
@@ -347,8 +354,8 @@ brepl -m '{"op" "ls-sessions"}'
 brepl -m '{"op" "eval" "code" "(+ 1 2)"}'
 
 # Multi-line expressions (single quotes make it easier)
-brepl -e '(let [x 10 
-               y 20] 
+brepl -e '(let [x 10
+               y 20]
            (+ x y))'
 
 # Quick math
@@ -424,6 +431,7 @@ brepl is specifically designed to integrate with [Claude Code](https://claude.ai
 **Why brepl for Claude Code?**
 
 Claude (and other LLMs) often struggle with Lisp parentheses, leading to syntax errors that break the development flow. brepl solves this by intercepting Claude's file operations and:
+
 1. Fixing bracket errors before they're written to disk
 2. Evaluating code in your REPL immediately after edits
 3. Providing clear feedback so Claude can correct course quickly
@@ -432,7 +440,6 @@ Claude (and other LLMs) often struggle with Lisp parentheses, leading to syntax 
 
 1. **Protocol servers** - Run MCP servers, configure protocol bridges, manage multiple processes
 2. **brepl hooks** - Direct integration with Claude Code using your existing REPL (our approach)
-
 
 #### Quick Setup for Claude Code
 
@@ -444,6 +451,7 @@ brepl hook install
 ```
 
 This installs three hooks that run automatically during Claude Code sessions:
+
 - **Pre-edit hook**: Intercepts Claude's file writes, validates syntax, and auto-fixes brackets
 - **Post-edit hook**: Evaluates the edited file in your REPL and reports any runtime errors
 - **Session cleanup**: Removes temporary backup files when Claude Code session ends
@@ -527,10 +535,12 @@ brepl hook eval ~/projects/service-b/src/handler.clj  # port 8000
 brepl takes a pragmatic approach to AI-assisted Clojure development: use battle-tested tools when available, provide clear feedback when not.
 
 **Minimal Core with Optional Enhancement:**
+
 - ✅ Syntax validation uses edamame (built into Babashka)
 - ✅ No protocol servers or separate processes required
 
 **Direct REPL Integration:**
+
 - ✅ Uses your running nREPL connection (no separate context)
 - ✅ Works with any nREPL server (Babashka, Clojure, ClojureScript)
 - ✅ Minimal overhead (fast Babashka startup)
@@ -544,10 +554,12 @@ Perfect for developers who want reliable AI assistance without managing multiple
 ## Troubleshooting
 
 **Error: No port specified, no .nrepl-port file found, and BREPL_PORT not set**
+
 - Start an nREPL server first: `bb nrepl-server`
 - Or specify port manually: `brepl -p 7888 -e "(+ 1 2)"`
 
 **Error connecting to nREPL server**
+
 - Check if nREPL server is running
 - Verify the port number is correct
 - For remote connections, ensure host is reachable
@@ -577,6 +589,7 @@ bb test --vars brepl-test/basic-evaluation-test
 ```
 
 The test suite covers:
+
 - Basic expression evaluation
 - File loading and execution
 - Error handling and exceptions
@@ -606,6 +619,7 @@ MPL-2.0 License
 ## Versioning
 
 brepl follows [break versioning](https://www.taoensso.com/break-versioning):
+
 - Version format: `<major>.<minor>.<non-breaking>`
 - Breaking changes increment the minor version (e.g., 1.0.0 → 1.1.0)
 - Non-breaking changes increment the patch version (e.g., 1.0.0 → 1.0.1)
@@ -615,6 +629,7 @@ brepl follows [break versioning](https://www.taoensso.com/break-versioning):
 Contributions are welcome! Please feel free to submit issues and pull requests.
 
 Before submitting a PR:
+
 1. Ensure all tests pass: `bb test`
 2. Add tests for any new functionality
 3. Update documentation as needed

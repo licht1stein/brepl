@@ -1,17 +1,17 @@
 ---
 name: brepl
-description: Use when evaluating Clojure code via brepl or fixing bracket errors. Teaches the heredoc pattern for reliable code evaluation and parinfer integration for automatic bracket correction.
+description: Use when evaluating Clojure code via brepl. Teaches the heredoc pattern for reliable code evaluation. Bracket errors are automatically fixed in hook mode.
 ---
 
 # brepl - Evaluating Clojure Code
 
 ## Overview
 
-brepl is a REPL client for evaluating Clojure expressions with built-in bracket fixing capabilities. This skill teaches:
+brepl is a REPL client for evaluating Clojure expressions with built-in automatic bracket fixing capabilities. This skill teaches:
 1. The heredoc pattern for reliable code evaluation
-2. Using parinfer to automatically fix bracket errors
+2. Understanding that bracket errors are automatically fixed in hook mode
 
-Use these patterns consistently for all Clojure code evaluation and error recovery.
+Use the heredoc pattern consistently for all Clojure code evaluation.
 
 ## The Heredoc Pattern - Default Approach
 
@@ -107,68 +107,31 @@ brepl -f src/myapp/core.clj
 
 After loading, you can evaluate functions from that namespace using either pattern.
 
-## Fixing Bracket Errors with Parinfer
+## Automatic Bracket Fixing
 
-When encountering bracket mismatches or unclosed delimiters, use `brepl parinfer --mode smart` to automatically fix them:
+When using brepl with Claude Code hooks installed, bracket errors are **automatically fixed** before code is written to files. You don't need to manually fix brackets.
 
-### Fixing Code Before Evaluation
+### How It Works
 
-```bash
-# Fix brackets in an expression, then evaluate
-brepl -e "$(echo '(defn foo [' | brepl parinfer --mode smart)"
-
-# Fix brackets in heredoc before evaluation
-brepl -e "$(cat <<'EOF' | brepl parinfer --mode smart
-(defn add [a b
-  (+ a b
-EOF
-)"
-```
-
-### Fixing File Contents
-
-```bash
-# Fix brackets in-place - MUST use temp file
-# (Cannot do: < file.clj > file.clj - shell truncates output file before reading input)
-FILE=src/myapp/core.clj && brepl parinfer --mode smart < "$FILE" > /tmp/tmp.clj && mv /tmp/tmp.clj "$FILE"
-
-# Or with explicit paths
-brepl parinfer --mode smart < src/myapp/core.clj > /tmp/fixed.clj && mv /tmp/fixed.clj src/myapp/core.clj
-```
-
-**Always overwrite the original file using a temp file** - Cannot redirect to the same file because the shell truncates it before reading.
-
-### When to Use Parinfer
-
-**Use parinfer smart mode when:**
-- Syntax errors mention "Unmatched delimiter" or "EOF while reading"
-- Brackets don't seem balanced
-- Code has missing closing brackets or parentheses
-- You need to validate bracket structure before evaluation
-
-**Pattern for error recovery:**
-1. Encounter bracket error during evaluation
-2. Pipe the code through `brepl parinfer --mode smart`
-3. Evaluate the fixed code
-
-### Parinfer Smart Mode
-
-The `--mode smart` option intelligently fixes:
+brepl uses [parmezan](https://github.com/borkdude/parmezan) to automatically fix:
 - Missing closing brackets: `(defn foo [` → `(defn foo [])`
 - Extra closing brackets: `(+ 1 2))` → `(+ 1 2)`
-- Mismatched delimiters: `[1 2 3)` → `[1 2 3]`
+- Mismatched delimiters in many cases
 - Multiple nested issues
 
-**Example workflow:**
-```bash
-# Original code with bracket error
-CODE='(defn calculate [x y
-  (let [sum (+ x y]
-    (* sum 2'
+### In Hook Mode
 
-# Fix and evaluate
-brepl -e "$(echo "$CODE" | brepl parinfer --mode smart)"
-```
+When Claude Code hooks are installed (`brepl hook install`):
+1. You write Clojure code (even with bracket errors)
+2. brepl automatically fixes brackets before writing
+3. The corrected code is saved and evaluated
+4. You see any evaluation errors immediately
+
+**No manual intervention needed** - just write code naturally and let brepl handle the brackets.
+
+### Manual Evaluation
+
+When evaluating code manually with `brepl -e`, syntax errors will be reported if brackets are invalid. The automatic fixing only applies in hook mode.
 
 ## Common Patterns
 
@@ -206,7 +169,7 @@ EOF
 2. **Quote the delimiter** - Always use `<<'EOF'` not `<<EOF` to prevent shell expansion
 3. **No escaping needed** - Inside heredoc, write Clojure code naturally
 4. **Multi-step operations** - Combine multiple forms in one heredoc block
-5. **Fix brackets with parinfer** - When encountering bracket errors, pipe through `brepl parinfer --mode smart` before evaluation
+5. **Trust automatic fixing** - In hook mode, brackets are fixed automatically; focus on writing correct logic
 
 ## Why Always Use Heredoc
 

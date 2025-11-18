@@ -9,7 +9,7 @@
 
 **brepl** (Bracket-fixing REPL) enables AI-assisted Clojure development by solving the notorious parenthesis problem. It's primarily designed for [Claude Code](https://claude.ai/claude-code) through its hook system, providing three essential capabilities:
 
-1. **🔧 Automatic bracket fixing** - Intelligently corrects mismatched parentheses, brackets, and braces using [parinfer-rust](https://github.com/eraserhd/parinfer-rust) when available
+1. **🔧 Automatic bracket fixing** - Intelligently corrects mismatched parentheses, brackets, and braces using [parmezan](https://github.com/borkdude/parmezan)
 2. **⚡ Simple REPL evaluation** - Gives AI agents a straightforward way to evaluate code in your running REPL, enabling truly interactive development
 3. **🔄 Live file synchronization** - Automatically evaluates edited files in the REPL, providing early feedback on evaluation errors before they become problems
 
@@ -19,24 +19,11 @@
 
 ### Bracket Auto-Fix
 
-brepl uses [parinfer-rust](https://github.com/eraserhd/parinfer-rust) for intelligent bracket correction:
+brepl uses [parmezan](https://github.com/borkdude/parmezan) for intelligent bracket correction:
 
-- **With parinfer-rust installed**: Automatically fixes mismatched delimiters, missing brackets, and extra closing parens
-- **Without parinfer-rust**: Blocks with detailed syntax errors for Claude to fix manually
-- **Nix installation**: Includes parinfer-rust automatically
-
-To install parinfer-rust separately:
-```bash
-# macOS
-brew install parinfer-rust
-
-# Nix
-nix-env -iA nixpkgs.parinfer-rust
-
-# Or build from source
-git clone https://github.com/eraserhd/parinfer-rust
-cd parinfer-rust && cargo install --path .
-```
+- **Pure Clojure**: No external binary dependencies required
+- **Automatic fixing**: Corrects mismatched delimiters, missing brackets, and extra closing parens
+- **Graceful fallback**: Blocks with syntax errors when auto-fix is not possible
 
 ## Quick Start
 
@@ -58,7 +45,6 @@ The `brepl hook install` command configures Claude Code to:
 - Provide immediate feedback on syntax and evaluation errors
 - Install the brepl skill that teaches Claude:
   - Heredoc pattern for reliable code evaluation
-  - `brepl parinfer --mode smart` for automatic bracket fixing
   - Error recovery workflows
 
 Now Claude can write Clojure code confidently without worrying about parentheses or missing REPL feedback.
@@ -73,9 +59,7 @@ brepl -e '(+ 1 2 3)'
 # Load and execute files
 brepl -f script.clj
 
-# Fix bracket errors with parinfer
-echo '(defn foo [' | brepl parinfer --mode smart
-# => (defn foo [])
+# Bracket fixing is automatic in hook mode
 ```
 
 ## Features
@@ -83,17 +67,15 @@ echo '(defn foo [' | brepl parinfer --mode smart
 ### Core Capabilities for AI-Assisted Development
 
 #### 🔧 Bracket Fixing
-- **Intelligent auto-correction** - Uses parinfer-rust when available to fix mismatched delimiters
-- **Error recovery** - When bracket errors occur, use `brepl parinfer --mode smart` to fix existing code
+- **Intelligent auto-correction** - Uses parmezan to fix mismatched delimiters automatically
+- **Pre-edit validation** - Catches and fixes bracket problems before they're written to files
 - **Detailed error reporting** - When auto-fix isn't possible, provides clear syntax errors for AI agents
-- **Pre-edit validation** - Catches bracket problems before they're written to files
-- **In-place file fixing** - Fix brackets in files: `brepl parinfer --mode smart < file.clj > /tmp/fixed.clj && mv /tmp/fixed.clj file.clj`
-- **Graceful degradation** - Works with or without parinfer-rust installed
+- **No external dependencies** - Pure Clojure solution, no binary installation required
 
 #### ⚡ Simple REPL Evaluation
 - **Direct nREPL integration** - AI agents can evaluate code in your running REPL with simple commands
 - **Heredoc pattern** - Skill teaches reliable evaluation pattern that eliminates shell quoting issues
-- **Bracket error handling** - Automatically pipe through parinfer when evaluation fails due to bracket errors
+- **Automatic bracket correction** - Bracket errors are fixed automatically in hook mode
 - **Project-aware discovery** - Automatically finds the right REPL for each file (v1.3.0)
 - **Full protocol support** - Access any nREPL operation, not just evaluation
 - **Fast Babashka runtime** - Instant startup for responsive AI interactions
@@ -130,7 +112,7 @@ let
   brepl = pkgs.callPackage (pkgs.fetchFromGitHub {
     owner = "licht1stein";
     repo = "brepl";
-    rev = "v2.1.1";
+    rev = "v2.2.0";
     hash = "sha256-zJc4ljMZRkv4Ips1Z1Y+NB7MuGkRmzgKNnNsbhDuT2w=";
   } + "/package.nix") {};
 in
@@ -180,7 +162,6 @@ brepl hook session-end <id>     # Cleanup session backups
 
 ### Skill Commands
 
-The brepl skill teaches Claude Code how to evaluate Clojure expressions reliably using the heredoc pattern and how to fix bracket errors with parinfer (see [Heredoc Pattern](#heredoc-pattern-for-reliable-evaluation) below).
 
 ```bash
 brepl skill install             # Install brepl skill to .claude/skills/brepl
@@ -191,32 +172,23 @@ brepl skill uninstall           # Remove brepl skill
 
 **What the skill teaches Claude:**
 - Heredoc pattern for reliable code evaluation
-- Automatic bracket fixing using `brepl parinfer --mode smart`
 - In-place file fixing workflows
 - Error recovery patterns
 
-### Parinfer Integration
 
-Direct access to parinfer-rust for bracket fixing:
 
 ```bash
-brepl parinfer [args...]        # Pass-through to parinfer-rust CLI
 ```
 
 **Examples:**
 ```bash
 # Fix brackets in an expression
-echo '(defn foo [' | brepl parinfer --mode smart
 # => (defn foo [])
 
 # Fix brackets in a file
-brepl parinfer --mode smart < src/broken.clj > /tmp/fixed.clj
 
-# See all parinfer options
-brepl parinfer --help
 ```
 
-**Claude Code integration:** When the brepl skill is installed, Claude Code automatically uses `brepl parinfer` to fix bracket errors before evaluation, making Clojure development seamless.
 
 ### Basic Usage
 
@@ -461,7 +433,6 @@ Claude (and other LLMs) often struggle with Lisp parentheses, leading to syntax 
 1. **Protocol servers** - Run MCP servers, configure protocol bridges, manage multiple processes
 2. **brepl hooks** - Direct integration with Claude Code using your existing REPL (our approach)
 
-brepl uses direct REPL integration with minimal overhead. Syntax validation uses Babashka's built-in edamame parser, and bracket auto-fix delegates to parinfer-rust when available (included in Nix installs, optional for bbin).
 
 #### Quick Setup for Claude Code
 
@@ -557,8 +528,6 @@ brepl takes a pragmatic approach to AI-assisted Clojure development: use battle-
 
 **Minimal Core with Optional Enhancement:**
 - ✅ Syntax validation uses edamame (built into Babashka)
-- ✅ Bracket auto-fix delegates to parinfer-rust when available
-- ✅ Works without parinfer-rust (blocks with detailed errors for Claude to fix)
 - ✅ No protocol servers or separate processes required
 
 **Direct REPL Integration:**
@@ -569,8 +538,6 @@ brepl takes a pragmatic approach to AI-assisted Clojure development: use battle-
 - ✅ Project-aware (handles multiple REPLs automatically)
 
 **Installation Options:**
-- **Nix**: Includes parinfer-rust automatically (zero configuration)
-- **bbin**: Optionally install parinfer-rust for auto-fix (works without it)
 
 Perfect for developers who want reliable AI assistance without managing multiple processes or protocol servers.
 

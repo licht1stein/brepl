@@ -1,75 +1,55 @@
 (ns brepl.lib.validator
-  "Validates Clojure code syntax using edamame parser."
-  (:require [edamame.core :as edamame]
-            [clojure.java.shell :as shell]
+  "Validates and fixes Clojure code syntax using parmezan."
+  (:require [borkdude.parmezan :as parmezan]
+            [clojure.java.io :as io]
             [clojure.string :as str]))
 
-(defn format-error-message
-  "Format a detailed error message from delimiter error data."
-  [error file-path]
-  (let [msg (:message error)
-        expected (:expected-delimiter error)
-        line (:line error)
-        col (:column error)]
-    (cond
-      ;; Unmatched delimiter means extra closing bracket
-      (clojure.string/includes? msg "Unmatched delimiter")
-      msg
-
-      (and expected line col)
-      (str msg " at line " line ", column " col)
-
-      expected
-      (str msg)
-
-      :else msg)))
-
-(defn delimiter-error?
-  "Parse content with edamame and return error info if delimiters are invalid.
-   Returns nil if valid, or a map with error details if invalid.
-   Parses ALL forms to catch both missing and extra delimiters.
-   Supports all Clojure reader macros (regex, deref, var-quote, etc.)."
-  [content]
-  (try
-    ;; Parse all forms with full reader macro support including reader conditionals
-    ;; Use :auto-resolve identity to accept :: keywords as valid syntax
-    (edamame/parse-string-all content {:all true
-                                       :read-cond :allow
-                                       :auto-resolve identity})
-    nil
-    (catch Exception e
-      (let [msg (ex-message e)
-            data (ex-data e)]
-        {:type :delimiter-error
-         :message msg
-         :line (:line data)
-         :column (:column data)
-         :expected-delimiter (:edamame/expected-delimiter data)
-         :opened-delimiter (:edamame/opened-delimiter data)
-         :opened-loc (:edamame/opened-delimiter-loc data)}))))
-
-(defn- parinfer-available?
-  "Check if parinfer-rust is available on the system."
-  []
-  (= 0 (:exit (shell/sh "which" "parinfer-rust"))))
-
 (defn auto-fix-brackets
-  "Attempt to auto-fix bracket errors using parinfer-rust if available.
+  "Attempt to auto-fix bracket errors using parmezan.
    Returns fixed content if successful, or nil if unable to fix."
   [content]
-  (when (parinfer-available?)
-    (let [result (shell/sh "parinfer-rust" "--mode" "smart" :in content)]
-      (when (= 0 (:exit result))
-        (let [fixed (str/trim-newline (:out result))]
-          ;; Verify the fix actually resolves the error
-          (when (nil? (delimiter-error? fixed))
-            fixed))))))
+  (try
+    (parmezan/parmezan content)
+    (catch Exception e
+      nil)))
+
+(defn- has-bb-shebang-from-file?
+  "Check if file starts with a Babashka shebang by reading only first line."
+  [file-path]
+  (try
+    (with-open [rdr (io/reader file-path)]
+      (when-let [first-line (.readLine rdr)]
+        (and (str/starts-with? first-line "#!")
+             (str/includes? first-line "bb"))))
+    (catch Exception _
+      false)))
+
+(defn- has-bb-shebang-from-string?
+  "Check if string content starts with a Babashka shebang."
+  [content]
+  (when content
+    (let [first-line (first (str/split-lines content))]
+      (and first-line
+           (str/starts-with? first-line "#!")
+           (str/includes? first-line "bb")))))
 
 (defn clojure-file?
-  "Check if file path has a Clojure file extension."
-  [file-path]
-  (let [ext (-> file-path
-                (clojure.string/split #"\.")
-                last
-                clojure.string/lower-case)]
-    (contains? #{"clj" "cljs" "cljc" "cljx"} ext)))
+  "Check if file is a Clojure/Babashka source file.
+   Checks file extension and optionally checks for shebang.
+
+   With one arg (file-path): checks extension, then reads first line if needed.
+   With two args (file-path content): checks extension, then checks content string."
+  ([file-path]
+   (let [ext (-> file-path
+                (str/split #"\.")
+                 last
+                 str/lower-case)]
+     (or (contains? #{"clj" "cljs" "cljc" "cljx" "bb"} ext)
+         (has-bb-shebang-from-file? file-path))))
+  ([file-path content]
+   (let [ext (-> file-path
+                (str/split #"\.")
+                 last
+                 str/lower-case)]
+     (or (contains? #{"clj" "cljs" "cljc" "cljx" "bb"} ext)
+         (has-bb-shebang-from-string? content)))))

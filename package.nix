@@ -2,12 +2,11 @@
 , stdenv
 , makeWrapper
 , babashka
-, parinfer-rust
 }:
 
 stdenv.mkDerivation rec {
   pname = "brepl";
-  version = "2.1.1";
+  version = "2.2.0";
 
   src = ./.;
 
@@ -24,7 +23,7 @@ stdenv.mkDerivation rec {
     chmod +x $out/share/brepl/brepl
 
     makeWrapper $out/share/brepl/brepl $out/bin/brepl \
-      --prefix PATH : ${lib.makeBinPath [ babashka parinfer-rust ]}
+      --prefix PATH : ${lib.makeBinPath [ babashka ]}
 
     runHook postInstall
   '';
@@ -34,7 +33,7 @@ stdenv.mkDerivation rec {
     longDescription = ''
       brepl (Bracket-fixing REPL) enables AI-assisted Clojure development by solving
       the notorious parenthesis problem. It validates syntax using Babashka's built-in
-      parser and intelligently fixes bracket errors with parinfer-rust—because AI agents
+      parser and intelligently fixes bracket errors with parmezan—because AI agents
       shouldn't struggle with Lisp parentheses. Provides automatic syntax validation,
       bracket auto-fix, and REPL synchronization. Also works as a fast nREPL client for
       command-line evaluations, file loading, and scripting workflows.

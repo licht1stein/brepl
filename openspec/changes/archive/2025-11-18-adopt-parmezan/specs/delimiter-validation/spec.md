@@ -1,8 +1,11 @@
 # delimiter-validation Specification
 
 ## Purpose
+
 TBD - created by archiving change add-hook-install. Update Purpose after archive.
-## Requirements
+
+## MODIFIED Requirements
+
 ### Requirement: Pre-Edit Auto-Fix
 
 The hook MUST automatically fix unbalanced or mismatched delimiters in Clojure code before writing to disk, enabling Claude to work with Clojure without manual bracket management.
@@ -183,3 +186,24 @@ Then the message should explain what error was detected
 And the message should suggest how to fix the issue
 And the message should be clear enough for Claude to understand
 
+## REMOVED Requirements
+
+### ~~Requirement: Pre-Edit Auto-Fix~~ (old implementation)
+
+**Removed:** The old implementation using edamame's `:edamame/expected-delimiter` for recursive fixing is replaced by a simpler unified approach.
+
+The following implementation-specific scenarios no longer apply:
+
+- Recursive appending of delimiters based on edamame exceptions
+- Checking for `:edamame/expected-delimiter` to determine fixability
+- Multi-stage detection and fixing
+
+### ~~Requirement: Clear Error Messages~~ (old detailed version)
+
+**Removed:** The old detailed error message formatting using edamame's exception data is simplified.
+
+The following scenarios no longer apply:
+
+- Error message includes specific line/column from edamame
+- Error message explains context with delimiter location details
+- Custom formatting of edamame's `:opened-delimiter` and `:expected-delimiter` data

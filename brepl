@@ -3,7 +3,6 @@
   (:require [babashka.cli :as cli]
             [clojure.java.io :as io]
             [babashka.fs :as fs]
-            [babashka.process :as process]
             [clojure.string :as str]
             [bencode.core :as bencode]
             [clojure.pprint :as pp]

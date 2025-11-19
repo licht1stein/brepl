@@ -8,6 +8,7 @@ description: Use when evaluating Clojure code via brepl. Teaches the heredoc pat
 ## Overview
 
 brepl is a REPL client for evaluating Clojure expressions with built-in automatic bracket fixing capabilities. This skill teaches:
+
 1. The heredoc pattern for reliable code evaluation
 2. Understanding that bracket errors are automatically fixed in hook mode
 
@@ -20,19 +21,22 @@ Use the heredoc pattern consistently for all Clojure code evaluation.
 ### Syntax
 
 ```bash
-brepl -e "$(cat <<'EOF'
+brepl "$(cat <<'EOF'
 (your clojure code here)
 EOF
 )"
 ```
+
+**Note**: The `-e` flag is optional - brepl automatically treats positional arguments as code to evaluate.
 
 **Important**: Use `<<'EOF'` (with quotes) not `<<EOF` to prevent shell variable expansion.
 
 ### Examples
 
 **Multi-line expressions**:
+
 ```bash
-brepl -e "$(cat <<'EOF'
+brepl "$(cat <<'EOF'
 (require '[clojure.string :as str])
 (str/join ", " ["a" "b" "c"])
 EOF
@@ -40,16 +44,18 @@ EOF
 ```
 
 **Code with quotes**:
+
 ```bash
-brepl -e "$(cat <<'EOF'
+brepl "$(cat <<'EOF'
 (println "String with 'single' and \"double\" quotes")
 EOF
 )"
 ```
 
 **Reloading and testing**:
+
 ```bash
-brepl -e "$(cat <<'EOF'
+brepl "$(cat <<'EOF'
 (require '[myapp.core] :reload)
 (myapp.core/some-function "test" 123)
 EOF
@@ -57,8 +63,9 @@ EOF
 ```
 
 **Complex data structures**:
+
 ```bash
-brepl -e "$(cat <<'EOF'
+brepl "$(cat <<'EOF'
 (def config
   {:database {:host "localhost"
               :port 5432
@@ -71,8 +78,9 @@ EOF
 ```
 
 **Running tests**:
+
 ```bash
-brepl -e "$(cat <<'EOF'
+brepl "$(cat <<'EOF'
 (require '[clojure.test :refer [run-tests]])
 (require '[myapp.core-test] :reload)
 (run-tests 'myapp.core-test)
@@ -80,22 +88,22 @@ EOF
 )"
 ```
 
-## Alternative: Direct `-e` Flag
+## Alternative: Simple Expressions
 
-While you can use the direct `-e` flag for simple expressions, the heredoc pattern is recommended as the default to maintain consistency:
+For very simple expressions, you can use direct positional arguments:
 
 ```bash
-# Works, but heredoc is preferred
-brepl -e '(inc 1)'
+# Simple expression
+brepl '(inc 1)'
 
 # Same with heredoc (consistent approach)
-brepl -e "$(cat <<'EOF'
+brepl "$(cat <<'EOF'
 (inc 1)
 EOF
 )"
 ```
 
-**Why prefer heredoc:** No mental overhead deciding which pattern to use, no risk of quoting issues, easy to extend.
+**Why prefer heredoc:** No mental overhead deciding which pattern to use, no risk of quoting issues, easy to extend. The `-e` flag is still available if you prefer explicit syntax.
 
 ## Loading Files
 
@@ -114,6 +122,7 @@ When using brepl with Claude Code hooks installed, bracket errors are **automati
 ### How It Works
 
 brepl uses [parmezan](https://github.com/borkdude/parmezan) to automatically fix:
+
 - Missing closing brackets: `(defn foo [` → `(defn foo [])`
 - Extra closing brackets: `(+ 1 2))` → `(+ 1 2)`
 - Mismatched delimiters in many cases
@@ -122,6 +131,7 @@ brepl uses [parmezan](https://github.com/borkdude/parmezan) to automatically fix
 ### In Hook Mode
 
 When Claude Code hooks are installed (`brepl hook install`):
+
 1. You write Clojure code (even with bracket errors)
 2. brepl automatically fixes brackets before writing
 3. The corrected code is saved and evaluated
@@ -131,21 +141,23 @@ When Claude Code hooks are installed (`brepl hook install`):
 
 ### Manual Evaluation
 
-When evaluating code manually with `brepl -e`, syntax errors will be reported if brackets are invalid. The automatic fixing only applies in hook mode.
+When evaluating code manually with `brepl`, syntax errors will be reported if brackets are invalid. The automatic fixing only applies in hook mode.
 
 ## Common Patterns
 
 ### Namespace reloading
+
 ```bash
-brepl -e "$(cat <<'EOF'
+brepl "$(cat <<'EOF'
 (require '[myapp.core] :reload-all)
 EOF
 )"
 ```
 
 ### Documentation lookup
+
 ```bash
-brepl -e "$(cat <<'EOF'
+brepl "$(cat <<'EOF'
 (require '[clojure.repl :refer [doc source]])
 (doc map)
 (source filter)
@@ -154,8 +166,9 @@ EOF
 ```
 
 ### Error inspection
+
 ```bash
-brepl -e "$(cat <<'EOF'
+brepl "$(cat <<'EOF'
 *e
 (require '[clojure.repl :refer [pst]])
 (pst)
@@ -173,7 +186,7 @@ EOF
 
 ## Why Always Use Heredoc
 
-**Consistency over optimization.** While direct `-e` works for simple cases, using heredoc everywhere means:
+**Consistency over optimization.** While simple positional arguments work for basic cases, using heredoc everywhere means:
 
 1. **No decision fatigue** - One pattern for everything
 2. **No quoting errors** - Everything between `<<'EOF'` and `EOF` is literal

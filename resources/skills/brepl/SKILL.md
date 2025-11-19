@@ -1,6 +1,6 @@
 ---
 name: brepl
-description: **MANDATORY** - Load this skill BEFORE using brepl in any way. Teaches the heredoc pattern for reliable code evaluation. Bracket errors are automatically fixed in hook mode.
+description: **MANDATORY** - Load this skill BEFORE using brepl in any way. Teaches the heredoc pattern for reliable code evaluation.
 ---
 
 # brepl - Evaluating Clojure Code
@@ -11,10 +11,7 @@ description: **MANDATORY** - Load this skill BEFORE using brepl in any way. Teac
 
 ## Overview
 
-brepl is a REPL client for evaluating Clojure expressions with built-in automatic bracket fixing capabilities. This skill teaches:
-
-1. The heredoc pattern for reliable code evaluation
-2. Understanding that bracket errors are automatically fixed in hook mode
+brepl is a REPL client for evaluating Clojure expressions. This skill teaches the heredoc pattern for reliable code evaluation.
 
 **Always load this skill before using brepl. Always use the heredoc pattern for all Clojure code evaluation.**
 
@@ -119,34 +116,6 @@ brepl -f src/myapp/core.clj
 
 After loading, you can evaluate functions from that namespace using either pattern.
 
-## Automatic Bracket Fixing
-
-When using brepl with Claude Code hooks installed, bracket errors are **automatically fixed** before code is written to files. You don't need to manually fix brackets.
-
-### How It Works
-
-brepl uses [parmezan](https://github.com/borkdude/parmezan) to automatically fix:
-
-- Missing closing brackets: `(defn foo [` → `(defn foo [])`
-- Extra closing brackets: `(+ 1 2))` → `(+ 1 2)`
-- Mismatched delimiters in many cases
-- Multiple nested issues
-
-### In Hook Mode
-
-When Claude Code hooks are installed (`brepl hook install`):
-
-1. You write Clojure code (even with bracket errors)
-2. brepl automatically fixes brackets before writing
-3. The corrected code is saved and evaluated
-4. You see any evaluation errors immediately
-
-**No manual intervention needed** - just write code naturally and let brepl handle the brackets.
-
-### Manual Evaluation
-
-When evaluating code manually with `brepl`, syntax errors will be reported if brackets are invalid. The automatic fixing only applies in hook mode.
-
 ## Common Patterns
 
 ### Namespace reloading
@@ -186,7 +155,7 @@ EOF
 2. **Quote the delimiter** - Always use `<<'EOF'` not `<<EOF` to prevent shell expansion
 3. **No escaping needed** - Inside heredoc, write Clojure code naturally
 4. **Multi-step operations** - Combine multiple forms in one heredoc block
-5. **Trust automatic fixing** - In hook mode, brackets are fixed automatically; focus on writing correct logic
+5. **Write correct Clojure** - Ensure proper bracket balancing and valid syntax
 
 ## Why Always Use Heredoc
 

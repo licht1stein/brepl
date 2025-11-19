@@ -1,9 +1,13 @@
 ---
 name: brepl
-description: Use when evaluating Clojure code via brepl. Teaches the heredoc pattern for reliable code evaluation. Bracket errors are automatically fixed in hook mode.
+description: **MANDATORY** - Load this skill BEFORE using brepl in any way. Teaches the heredoc pattern for reliable code evaluation. Bracket errors are automatically fixed in hook mode.
 ---
 
 # brepl - Evaluating Clojure Code
+
+## CRITICAL: Load This Skill First
+
+**You MUST load this skill before using brepl.** Do NOT attempt to use brepl without loading this skill first, or you will use incorrect syntax.
 
 ## Overview
 
@@ -12,7 +16,7 @@ brepl is a REPL client for evaluating Clojure expressions with built-in automati
 1. The heredoc pattern for reliable code evaluation
 2. Understanding that bracket errors are automatically fixed in hook mode
 
-Use the heredoc pattern consistently for all Clojure code evaluation.
+**Always load this skill before using brepl. Always use the heredoc pattern for all Clojure code evaluation.**
 
 ## The Heredoc Pattern - Default Approach
 

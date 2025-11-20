@@ -55,6 +55,7 @@
   (println "USAGE:")
   (println "    brepl [OPTIONS] <expr>")
   (println "    brepl [OPTIONS] -e <expr>")
+  (println "    brepl [OPTIONS] <<'EOF' ... EOF")
   (println "    brepl [OPTIONS] -f <file>")
   (println "    brepl [OPTIONS] -m <message>")
   (println "    brepl hook <subcommand> [args]")
@@ -75,6 +76,10 @@
   (println "EXAMPLES:")
   (println "    brepl '(+ 1 2 3)'              # Positional argument (implicit -e)")
   (println "    brepl -e '(+ 1 2 3)'           # Explicit -e flag")
+  (println "    brepl <<'EOF'                  # Stdin heredoc (implicit -e)")
+  (println "      (+ 1 2 3)")
+  (println "      EOF")
+  (println "    echo '(+ 1 2)' | brepl         # Piped stdin")
   (println "    brepl -f script.clj")
   (println "    brepl -m '{\"op\" \"describe\"}'")
   (println "    brepl -p 7888 '(println \"Hello\")'")
@@ -135,12 +140,28 @@
        (when-let [env-port (get-env-var "BREPL_PORT")]
          (Integer/parseInt env-port)))))
 
+(defn stdin-available?
+  "Check if stdin has data available without blocking"
+  []
+  (pos? (.available System/in)))
+
+(defn read-stdin
+  "Read all available input from stdin.
+  Returns nil if stdin has no data."
+  []
+  (when (stdin-available?)
+    (try
+      (let [input (slurp *in*)]
+        (when-not (str/blank? input)
+          input))
+      (catch Exception _ nil))))
+
 (defn exit-with-help [msg]
   (when msg (println msg) (println))
   (print-help)
   (System/exit 1))
 
-(defn validate-args [opts]
+(defn validate-args [opts stdin-available?]
   (when (:help opts) (print-help) (System/exit 0))
   (when (:version opts) (println (str "brepl " version)) (System/exit 0))
 
@@ -148,7 +169,9 @@
         mode-count (count modes)]
     (cond
       (> mode-count 1) (exit-with-help "Error: Cannot specify multiple options (-e, -f, -m) together")
-      (zero? mode-count) (exit-with-help "Error: Must specify one of -e EXPR, -f FILE, or -m MESSAGE")
+      ;; Allow zero modes if stdin is available
+      (and (zero? mode-count) (not stdin-available?))
+      (exit-with-help "Error: Must specify one of -e EXPR, -f FILE, or -m MESSAGE")
       (and (:f modes) (not (.exists (io/file (:f opts)))))
       (do (println "Error: File does not exist:" (:f opts))
           (System/exit 1)))))
@@ -345,36 +368,45 @@
 
 (defn -main [& args]
   (let [parsed (cli/parse-opts args {:spec cli-spec :args->opts [:e]})
-        ;; If no mode flags, check if :e was populated by args->opts
-        opts (if (and (not (:f parsed)) (not (:m parsed)) (:e parsed))
-               parsed
-               ;; Otherwise check the old way for explicit -e
-               parsed)
-        host (resolve-host (:h opts))
-        port (resolve-port (:p opts) (:f opts))]
+        ;; Check if stdin is available (non-blocking)
+        has-stdin? (and (not (:f parsed))
+                        (not (:m parsed))
+                        (not (:e parsed))
+                        (stdin-available?))
+        host (resolve-host (:h parsed))
+        port (resolve-port (:p parsed) (:f parsed))]
 
-    (validate-args opts)
+    (validate-args parsed has-stdin?)
 
-    (when-not port
-      (println "Error: No port specified, no .nrepl-port file found, and BREPL_PORT not set")
-      (System/exit 1))
+    ;; After validation passes, try reading stdin if we have no input
+    (let [should-try-stdin? (and (not (:f parsed))
+                                 (not (:m parsed))
+                                 (not (:e parsed)))
+          stdin-input (when should-try-stdin? (read-stdin))
+          opts (if stdin-input
+                 (assoc parsed :e stdin-input)
+                 parsed)]
 
-    (let [result (cond
-                   (:e opts) (eval-expression host port (:e opts) opts)
-                   (:f opts) (eval-file host port (:f opts) opts)
+      (when-not port
+        (println "Error: No port specified, no .nrepl-port file found, and BREPL_PORT not set")
+        (System/exit 1))
+
+      (let [result (cond
+                     (:e opts) (eval-expression host port (:e opts) opts)
+                     (:f opts) (eval-file host port (:f opts) opts)
                    (:m opts) (do (process-raw-message host port (:m opts) opts)
                                  false))] ; raw messages don't track errors
 
-      ;; Handle hook mode
-      (if (:hook opts)
-        (let [{:keys [processed has-error?]} result
-              hook-response (format-hook-response processed has-error?)]
-          (println (json/generate-string hook-response))
-          (System/exit (if has-error? 2 0)))
+        ;; Handle hook mode
+        (if (:hook opts)
+          (let [{:keys [processed has-error?]} result
+                hook-response (format-hook-response processed has-error?)]
+            (println (json/generate-string hook-response))
+            (System/exit (if has-error? 2 0)))
 
-        ;; Regular mode - for backward compatibility, use exit code 2 for eval errors
-        (when result
-          (System/exit 2))))))
+          ;; Regular mode - for backward compatibility, use exit code 2 for eval errors
+          (when result
+            (System/exit 2)))))))
 
 (defn debug-log [msg]
   (spit "/tmp/brepl-hook-debug.log"

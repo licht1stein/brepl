@@ -116,6 +116,20 @@ brepl -f src/myapp/core.clj
 
 After loading, you can evaluate functions from that namespace using either pattern.
 
+## Fixing Unbalanced Brackets
+
+Use `brepl balance` to fix unbalanced brackets in Clojure files using parmezan:
+
+```bash
+# Fix file in place (default)
+brepl balance src/myapp/core.clj
+
+# Preview fix to stdout
+brepl balance src/myapp/core.clj --dry-run
+```
+
+This is useful for recovering files with bracket errors.
+
 ## Common Patterns
 
 ### Namespace reloading

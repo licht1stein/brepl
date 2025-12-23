@@ -11,7 +11,7 @@
   (:import [java.net Socket]
            [java.io PushbackInputStream]))
 
-(def version "2.3.1")
+(def version "2.3.2")
 
 ;; Load lib files and require namespaces
 (let [script-dir (some-> (System/getProperty "babashka.file")
@@ -59,6 +59,7 @@
   (println "    brepl [OPTIONS] -m <message>")
   (println "    brepl hook <subcommand> [args]")
   (println "    brepl skill <subcommand>")
+  (println "    brepl balance <file> [--write]")
   (println)
   (println "OPTIONS:")
   (println (cli/format-opts {:spec cli-spec :order [:e :f :m :h :p :verbose :version :help]}))
@@ -568,6 +569,54 @@
                         (not (contains? #{"validate" "eval" "install" "uninstall" "session-end"} subcommand)))
                  1 0)))
 
+(defn show-balance-help []
+  (println "brepl balance - Fix unbalanced brackets in Clojure files")
+  (println)
+  (println "USAGE:")
+  (println "    brepl balance <file>")
+  (println "    brepl balance <file> --dry-run")
+  (println)
+  (println "OPTIONS:")
+  (println "    --dry-run      Print fixed content to stdout instead of overwriting")
+  (println)
+  (println "EXAMPLES:")
+  (println "    brepl balance src/core.clj             # Fix file in place")
+  (println "    brepl balance src/core.clj --dry-run   # Preview fix to stdout")
+  (System/exit 0))
+
+(defn handle-balance [args]
+  (let [dry-run? (some #(= "--dry-run" %) args)
+        file-args (remove #(= "--dry-run" %) args)
+        file-path (first file-args)]
+    (cond
+      (nil? file-path)
+      (show-balance-help)
+
+      (not (.exists (io/file file-path)))
+      (do (binding [*out* *err*]
+            (println "Error: File not found:" file-path))
+          (System/exit 1))
+
+      :else
+      (let [content (slurp file-path)
+            fixed (validator/auto-fix-brackets content)]
+        (if fixed
+          (if dry-run?
+            (do (print fixed)
+                (flush)
+                (System/exit 0))
+            (do (spit file-path fixed)
+                (println "Fixed:" file-path)
+                (System/exit 0)))
+          (do (binding [*out* *err*]
+                (println "Error: Unable to fix" file-path))
+              (System/exit 1)))))))
+
+(defn -main-balance
+  "Handle brepl balance command"
+  [args]
+  (handle-balance args))
+
 (defn show-skill-help [subcommand]
   (println "brepl skill - Claude Code skill management")
   (println)
@@ -625,6 +674,10 @@
     (and (> (count *command-line-args*) 0)
          (= "skill" (first *command-line-args*)))
     (-main-skill (rest *command-line-args*))
+
+    (and (> (count *command-line-args*) 0)
+         (= "balance" (first *command-line-args*)))
+    (-main-balance (rest *command-line-args*))
 
     :else
     (apply -main *command-line-args*)))

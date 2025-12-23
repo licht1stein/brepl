@@ -19,7 +19,17 @@ brepl is a REPL client for evaluating Clojure expressions. This skill teaches th
 
 **Always use heredoc for brepl evaluation.** This eliminates quoting issues, works for all cases, and provides a consistent, reliable pattern.
 
-### Syntax
+### Syntax (Stdin - Recommended)
+
+```bash
+brepl <<'EOF'
+(your clojure code here)
+EOF
+```
+
+This is the simplest heredoc syntax - stdin feeds directly to brepl.
+
+### Alternative Syntax (Command Substitution)
 
 ```bash
 brepl "$(cat <<'EOF'
@@ -28,7 +38,9 @@ EOF
 )"
 ```
 
-**Note**: The `-e` flag is optional - brepl automatically treats positional arguments as code to evaluate.
+Both work identically. Stdin syntax is shorter and cleaner.
+
+**Note**: The `-e` flag is optional - brepl automatically treats stdin and positional arguments as code to evaluate.
 
 **Important**: Use `<<'EOF'` (with quotes) not `<<EOF` to prevent shell variable expansion.
 
@@ -37,20 +49,18 @@ EOF
 **Multi-line expressions**:
 
 ```bash
-brepl "$(cat <<'EOF'
+brepl <<'EOF'
 (require '[clojure.string :as str])
 (str/join ", " ["a" "b" "c"])
 EOF
-)"
 ```
 
 **Code with quotes**:
 
 ```bash
-brepl "$(cat <<'EOF'
+brepl <<'EOF'
 (println "String with 'single' and \"double\" quotes")
 EOF
-)"
 ```
 
 **Reloading and testing**:
@@ -135,32 +145,29 @@ This is useful for recovering files with bracket errors.
 ### Namespace reloading
 
 ```bash
-brepl "$(cat <<'EOF'
+brepl <<'EOF'
 (require '[myapp.core] :reload-all)
 EOF
-)"
 ```
 
 ### Documentation lookup
 
 ```bash
-brepl "$(cat <<'EOF'
+brepl <<'EOF'
 (require '[clojure.repl :refer [doc source]])
 (doc map)
 (source filter)
 EOF
-)"
 ```
 
 ### Error inspection
 
 ```bash
-brepl "$(cat <<'EOF'
+brepl <<'EOF'
 *e
 (require '[clojure.repl :refer [pst]])
 (pst)
 EOF
-)"
 ```
 
 ## Critical Rules

@@ -86,4 +86,43 @@
           (fn [filepath]
             (let [result (run-brepl "-p" port "-f" filepath)]
               (is (= 0 (:exit result)))
-              (is (clojure.string/includes? (:out result) "15")))))))))
+              (is (clojure.string/includes? (:out result) "15"))))))
+
+;; Stdin input tests
+
+(deftest stdin-input-test
+  (with-nrepl-server
+    (fn [port]
+      (testing "Simple expression via stdin"
+        (let [result (shell {:out :string :err :string :continue true :in "(+ 1 2)"}
+                            "./brepl" "-p" (str port))]
+          (is (= 0 (:exit result)))
+          (is (clojure.string/includes? (:out result) "3"))))
+
+      (testing "Multiline code via stdin"
+        (let [result (shell {:out :string :err :string :continue true
+                             :in "(require '[clojure.string :as str])\n(str/upper-case \"hello\")"}
+                            "./brepl" "-p" (str port))]
+          (is (= 0 (:exit result)))
+          (is (clojure.string/includes? (:out result) "HELLO"))))
+
+      (testing "Stdin with explicit -e flag"
+        (let [result (shell {:out :string :err :string :continue true :in "(+ 10 20)"}
+                            "./brepl" "-e" "-p" (str port))]
+          (is (= 0 (:exit result)))
+          (is (clojure.string/includes? (:out result) "30"))))
+
+      (testing "Stdin takes precedence over positional arg"
+        (let [result (shell {:out :string :err :string :continue true :in "(+ 1 2)"}
+                            "./brepl" "-p" (str port) "(+ 3 4)")]
+          (is (= 0 (:exit result)))
+          (is (clojure.string/includes? (:out result) "3"))))
+
+      (testing "File flag ignores stdin"
+        (with-temp-file "test" ".clj"
+          "(+ 7 8)"
+          (fn [filepath]
+            (let [result (shell {:out :string :err :string :continue true :in "(+ 1 2)"}
+                                "./brepl" "-f" filepath "-p" (str port))]
+              (is (= 0 (:exit result)))
+              (is (clojure.string/includes? (:out result) "15"))))))))))))

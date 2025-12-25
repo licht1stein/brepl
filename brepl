@@ -493,6 +493,48 @@
         (debug-log (str "ERROR parsing stdin: " (.getMessage e)))
         [nil nil nil nil]))))
 
+(defn apply-edit
+  "Simulate Edit tool: replace first occurrence of old_string with new_string in file content."
+  [file-content old-string new-string]
+  (when-let [idx (str/index-of file-content old-string)]
+    (str (subs file-content 0 idx)
+         new-string
+         (subs file-content (+ idx (count old-string))))))
+
+(defn compute-end-delta
+  "Compare two strings from the end, return chars removed and added.
+   Returns [removed-suffix added-suffix] or nil if changes aren't just at end."
+  [original fixed]
+  (let [orig-len (count original)
+        fixed-len (count fixed)
+        ;; Find common prefix length
+        common-prefix (loop [i 0]
+                        (if (and (< i orig-len)
+                                 (< i fixed-len)
+                                 (= (nth original i) (nth fixed i)))
+                          (recur (inc i))
+                          i))]
+    ;; Everything after common prefix is the delta
+    [(subs original common-prefix)
+     (subs fixed common-prefix)]))
+
+(defn adjust-new-string-for-fix
+  "Adjust new_string based on what parmezan changed at the end of the file."
+  [new-string result-file fixed-file]
+  (let [[removed added] (compute-end-delta result-file fixed-file)]
+    (cond
+      ;; Parmezan added closing brackets at end
+      (and (empty? removed) (seq added))
+      (str new-string added)
+
+      ;; Parmezan removed extra brackets from end
+      (and (seq removed) (empty? added)
+           (str/ends-with? new-string removed))
+      (subs new-string 0 (- (count new-string) (count removed)))
+
+      ;; Complex change - can't adjust simply
+      :else nil)))
+
 (defn handle-validate [args]
   (let [[file-path content tool-name tool-input] (get-hook-input args)]
     (when (or (nil? file-path) (nil? content))
@@ -501,18 +543,102 @@
     (when-not (validator/clojure-file? file-path content)
       (allow-hook))
 
-    ;; Try to auto-fix brackets with parmezan
-    (if-let [fixed (validator/auto-fix-brackets content)]
-      (do
-        ;; Create backup if in Claude Code session
-        (when-let [session-id (System/getenv "SESSION_ID")]
-          (backup/create-backup file-path session-id))
-        ;; If content was modified, apply fix; otherwise allow as-is
-        (if (= fixed content)
-          (allow-hook)
-          (allow-hook tool-name tool-input fixed)))
-      ;; If parmezan couldn't fix it, block
-      (block-hook (str "Syntax error in " file-path ": unable to auto-fix delimiter errors")))))
+    ;; For Edit: validate the full file after applying the edit
+    ;; For Write: validate the content directly
+    (let [file-exists? (.exists (io/file file-path))
+          current-file (when file-exists? (slurp file-path))
+          {:keys [old_string new_string]} tool-input
+
+          ;; Compute what the file will look like after this operation
+          result-file (case tool-name
+                        "Write" content
+                        "Edit" (if (and current-file old_string new_string)
+                                 (apply-edit current-file old_string new_string)
+                                 content)
+                        content)]
+
+      (when (nil? result-file)
+        (block-hook "Could not simulate edit - old_string not found in file"))
+
+      ;; Try to validate/fix brackets with parmezan on the FULL result
+      (if-let [fixed (validator/auto-fix-brackets result-file)]
+        (do
+          ;; Create backup if in Claude Code session
+          (when-let [session-id (System/getenv "SESSION_ID")]
+            (backup/create-backup file-path session-id))
+
+          (if (= fixed result-file)
+            ;; Already balanced - allow as-is
+            (allow-hook)
+            ;; Needs fixing
+            (case tool-name
+              ;; For Write: we can fix directly
+              "Write"
+              (allow-hook tool-name tool-input fixed)
+
+              ;; For Edit: try to adjust new_string based on end delta
+              "Edit"
+              (if-let [adjusted (adjust-new-string-for-fix new_string result-file fixed)]
+                (allow-hook tool-name tool-input adjusted)
+                ;; Complex change - allow and let PostToolUse balance-file! fix it
+                (allow-hook))
+
+              (allow-hook))))
+        ;; If parmezan couldn't fix it at all, block
+        (block-hook (str "Syntax error in " file-path ": unable to auto-fix delimiter errors"))))))
+
+(defn diff-lines
+  "Compare original and fixed content, return info about changed lines."
+  [original fixed]
+  (let [orig-lines (str/split-lines original)
+        fixed-lines (str/split-lines fixed)
+        orig-count (count orig-lines)
+        fixed-count (count fixed-lines)
+        max-lines (max orig-count fixed-count)]
+    (loop [i 0
+           changes []]
+      (if (>= i max-lines)
+        changes
+        (let [orig-line (get orig-lines i)
+              fixed-line (get fixed-lines i)]
+          (recur (inc i)
+                 (cond
+                   ;; Line added
+                   (nil? orig-line)
+                   (conj changes {:line (inc i) :type :added :content fixed-line})
+                   ;; Line removed
+                   (nil? fixed-line)
+                   (conj changes {:line (inc i) :type :removed :content orig-line})
+                   ;; Line changed
+                   (not= orig-line fixed-line)
+                   (conj changes {:line (inc i) :type :changed :from orig-line :to fixed-line})
+                   ;; No change
+                   :else changes)))))))
+
+(defn format-balance-report
+  "Format balance changes for Claude to understand."
+  [file-path changes]
+  (let [header (str "Auto-fixed brackets in " file-path ":")
+        details (for [{:keys [line type content from to]} changes]
+                  (case type
+                    :added (str "  Line " line ": added \"" content "\"")
+                    :removed (str "  Line " line ": removed \"" content "\"")
+                    :changed (str "  Line " line ": \"" from "\" → \"" to "\"")))]
+    (str/join "\n" (cons header details))))
+
+(defn balance-file!
+  "Run balance on file, writing fixes in-place.
+   Returns nil if no fix needed, or a report string if fixes were made."
+  [file-path]
+  (when (validator/clojure-file? file-path)
+    (let [content (slurp file-path)
+          fixed (validator/auto-fix-brackets content)]
+      (when (and fixed (not= fixed content))
+        (let [changes (diff-lines content fixed)
+              report (format-balance-report file-path changes)]
+          (debug-log report)
+          (spit file-path fixed)
+          report)))))
 
 (defn handle-eval [args]
   (let [file-path (if (empty? args) (get-file-path-from-stdin) (first args))]
@@ -522,18 +648,28 @@
     (when-not (.exists (io/file file-path))
       (block-hook "PostToolUse" (str "File not found: " file-path)))
 
-    ;; Evaluate file via nREPL if available
-    (if-let [port (resolve-port nil file-path)]
-      (let [result (eval-file (resolve-host nil) port file-path {:hook true})]
-        (if (:has-error? result)
+    ;; Balance brackets before evaluation
+    (let [balance-report (balance-file! file-path)]
+
+      ;; Evaluate file via nREPL if available
+      (if-let [port (resolve-port nil file-path)]
+        (let [result (eval-file (resolve-host nil) port file-path {:hook true})
+              eval-msg (when (:has-error? result)
+                         (str "Evaluation error: " (get-in result [:processed :ex] "Unknown error")))
+              reason (str/join "\n" (remove nil? [balance-report eval-msg]))]
+          (if (seq reason)
+            (json-exit {:hookSpecificOutput
+                        {:hookEventName "PostToolUse"
+                         :permissionDecision "allow"
+                         :permissionDecisionReason reason}} 0)
+            (allow-hook "PostToolUse")))
+        ;; No nREPL available
+        (if balance-report
           (json-exit {:hookSpecificOutput
                       {:hookEventName "PostToolUse"
                        :permissionDecision "allow"
-                       :permissionDecisionReason (str "Evaluation error: "
-                                                      (get-in result [:processed :ex] "Unknown error"))}} 0)
-          (allow-hook "PostToolUse")))
-      ;; No nREPL available, just allow
-      (allow-hook "PostToolUse"))))
+                       :permissionDecisionReason balance-report}} 0)
+          (allow-hook "PostToolUse"))))))
 
 (defn handle-install [args]
   (let [opts (cli/parse-opts args {:spec {:strict-eval {:coerce :boolean}

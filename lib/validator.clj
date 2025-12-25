@@ -1,6 +1,6 @@
 ;; Add parmezan dependency at runtime
 (require '[babashka.deps :as deps])
-(deps/add-deps '{:deps {io.github.borkdude/parmezan {:git/sha "39a978daffc025aceeed6a8ea2acaabbba901154"}}})
+(deps/add-deps '{:deps {io.github.borkdude/parmezan {:git/sha "a10b6c9019e7b01fe31045929505fe7bd5f2b468"}}})
 
 (ns brepl.lib.validator
   "Validates and fixes Clojure code syntax using parmezan."

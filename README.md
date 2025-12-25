@@ -118,7 +118,7 @@ let
     owner = "licht1stein";
     repo = "brepl";
     rev = "v2.3.3";
-    hash = "sha256-UTRHufUKNqINAAwh4GVioYK1ibpti6X9cOUgOahDzt0=";
+    hash = "sha256-P7ygycm1I4awo8hEMrt7Ltcw6NfJJ1lsiM+bHuaQfvQ=";
   } + "/package.nix") {};
 in
 pkgs.mkShell {

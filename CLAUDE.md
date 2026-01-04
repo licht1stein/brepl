@@ -1,14 +1,17 @@
 <!-- OPENSPEC:START -->
+
 # OpenSpec Instructions
 
 These instructions are for AI assistants working in this project.
 
 Always open `@/openspec/AGENTS.md` when the request:
+
 - Mentions planning or proposals (words like proposal, spec, change, plan)
 - Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
 - Sounds ambiguous and you need the authoritative spec before coding
 
 Use `@/openspec/AGENTS.md` to learn:
+
 - How to create and apply change proposals
 - Spec format and conventions
 - Project structure and guidelines
@@ -30,6 +33,7 @@ bb version-bump major   # 2.1.0 -> 3.0.0
 ```
 
 This automatically updates:
+
 - `brepl` - main script version string
 - `package.nix` - Nix derivation version
 - `README.md` - installation example version
@@ -39,28 +43,38 @@ This automatically updates:
 When merging a PR that requires a new release:
 
 1. **Merge PR to master**
+
    ```bash
    gh pr merge <number> --squash
    ```
 
 2. **Pull latest master**
+
    ```bash
    git checkout master && git pull
    ```
 
 3. **Tag the release**
+
    ```bash
    git tag v2.1.1
    git push github v2.1.1
    ```
 
-4. **Update Nix hash** (after tag is pushed)
+4. **Create GitHub release**
+
+   ```bash
+   gh release create v2.1.1 --title "v2.1.1" --notes "Release notes here"
+   ```
+
+5. **Update Nix hash** (after tag is pushed)
+
    ```bash
    nix-prefetch-github licht1stein brepl --rev v2.1.1
    ```
 
-5. **Update README.md with new hash**
-   - Replace the `hash` value in the installation example with output from step 4
+6. **Update README.md with new hash**
+   - Replace the `hash` value in the installation example with output from step 5
    - Commit and push:
    ```bash
    git add README.md

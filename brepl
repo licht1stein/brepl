@@ -18,12 +18,13 @@
                          io/file
                          .getParentFile
                          .getAbsolutePath)]
-  (doseq [lib ["hook_utils" "validator" "backup" "installer"]]
+  (doseq [lib ["hook_utils" "validator" "backup" "installer" "stop_hooks"]]
     (load-file (str script-dir "/lib/" lib ".clj"))))
 
 (require '[brepl.lib.validator :as validator]
          '[brepl.lib.backup :as backup]
-         '[brepl.lib.installer :as installer])
+         '[brepl.lib.installer :as installer]
+         '[brepl.lib.stop-hooks :as stop-hooks])
 
 (def cli-spec
   {:e {:desc "Expression to evaluate (everything after -e is treated as code)"
@@ -691,12 +692,64 @@
   (println "Hooks uninstalled successfully.")
   (System/exit 0))
 
-(defn handle-session-end [args]
-  (if (empty? args)
-    (do (println "Error: session-id required")
-        (System/exit 1))
-    (do (backup/cleanup-session (first args))
-        (System/exit 0))))
+(defn handle-session-end [_args]
+  (let [input (try
+                (json/parse-stream *in* true)
+                (catch Exception e
+                  (binding [*out* *err*]
+                    (println "Error parsing SessionEnd event JSON:" (.getMessage e)))
+                  (System/exit 1)))
+        session-id (or (:session_id input) "unknown")]
+    (backup/cleanup-session session-id)
+    ;; Also cleanup stop hook state
+    (stop-hooks/cleanup-state session-id)
+    (System/exit 0)))
+
+(defn handle-stop [_args]
+  ;; Initialize stop-hooks dynamic vars for REPL hook execution
+  (alter-var-root #'stop-hooks/*nrepl-eval-fn* (constantly eval-expression))
+  (alter-var-root #'stop-hooks/*resolve-port-fn* (constantly resolve-port))
+  (alter-var-root #'stop-hooks/*resolve-host-fn* (constantly resolve-host))
+
+  ;; Parse stdin JSON to get session_id
+  (let [input (try
+                (json/parse-stream *in* true)
+                (catch Exception e
+                  (binding [*out* *err*]
+                    (println "Error parsing Stop event JSON:" (.getMessage e)))
+                  (System/exit 1)))
+        session-id (or (:session_id input) "unknown")]
+
+    ;; Load and validate hooks config
+    (let [config (stop-hooks/load-hooks)]
+      (cond
+        ;; No config file - success, no hooks to run
+        (nil? config)
+        (System/exit 0)
+
+        ;; Parse error in config
+        (:error config)
+        (do
+          (binding [*out* *err*]
+            (println "Error parsing .brepl/hooks.edn:" (:error config)))
+          (System/exit 1))
+
+        ;; Validate config
+        :else
+        (let [validation (stop-hooks/validate-hooks config)]
+          (if-not (:valid? validation)
+            (do
+              (binding [*out* *err*]
+                (println "Invalid .brepl/hooks.edn configuration:")
+                (println (pr-str (:errors validation))))
+              (System/exit 1))
+
+            ;; Run hooks
+            (let [result (stop-hooks/run-stop-hooks session-id config)]
+              (when (pos? (:exit-code result))
+                (binding [*out* *err*]
+                  (println (:message result))))
+              (System/exit (:exit-code result)))))))))
 
 (defn handle-skill-install [_args]
   (let [result (installer/install-skill)]
@@ -719,22 +772,24 @@
   (println "USAGE:")
   (println "    brepl hook validate [--debug] <file> <content>")
   (println "    brepl hook eval [--debug] <file>")
+  (println "    brepl hook stop")
   (println "    brepl hook install [--strict-eval] [--debug]")
   (println "    brepl hook uninstall")
-  (println "    brepl hook session-end <session-id>")
+  (println "    brepl hook session-end")
   (println)
   (println "SUBCOMMANDS:")
   (println "    validate       Validate Clojure file syntax before edit")
   (println "    eval           Evaluate file and check for runtime errors")
+  (println "    stop           Run stop hooks from .brepl/hooks.edn")
   (println "    install        Install hooks in .claude/settings.local.json")
   (println "    uninstall      Remove hooks from .claude/settings.local.json")
-  (println "    session-end    Clean up session backup files")
+  (println "    session-end    Clean up session backup files (reads JSON from stdin)")
   (println)
   (println "FLAGS:")
   (println "    --debug        Save hook JSON input to ./tmp/hooks-requests/")
   (println "    --strict-eval  Exit with error on eval failures (install only)")
   (System/exit (if (and subcommand
-                        (not (contains? #{"validate" "eval" "install" "uninstall" "session-end"} subcommand)))
+                        (not (contains? #{"validate" "eval" "stop" "install" "uninstall" "session-end"} subcommand)))
                  1 0)))
 
 (defn show-balance-help []
@@ -809,6 +864,7 @@
   (case subcommand
     "validate"    (handle-validate args)
     "eval"        (handle-eval args)
+    "stop"        (handle-stop args)
     "install"     (handle-install args)
     "uninstall"   (handle-uninstall args)
     "session-end" (handle-session-end args)

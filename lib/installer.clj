@@ -1,7 +1,8 @@
 (ns brepl.lib.installer
   "Hook installer for Claude Code integration."
   (:require [babashka.fs :as fs]
-            [cheshire.core :as json]))
+            [cheshire.core :as json]
+            [clojure.string :as str]))
 
 (defn settings-local-path []
   ".claude/settings.local.json")
@@ -39,16 +40,34 @@
                     :hooks [{:type "command"
                              :command (str "brepl hook eval" debug-flag)
                              :continueOnError (not (:strict-eval opts))}]}]
+     :Stop [{:matcher ""
+             :hooks [{:type "command"
+                      :command (str "brepl hook stop" debug-flag)}]}]
      :SessionEnd [{:matcher "*"
                    :hooks [{:type "command"
                             :command "brepl hook session-end"}]}]}))
 
+(defn brepl-hook?
+  "Check if a hook entry belongs to brepl."
+  [hook-entry]
+  (some #(str/starts-with? (:command %) "brepl hook")
+        (:hooks hook-entry)))
+
+(defn merge-hook-event
+  "Merge new brepl entries with existing non-brepl entries for a single event."
+  [existing-entries new-entries]
+  (let [non-brepl (remove brepl-hook? existing-entries)]
+    (into (vec non-brepl) new-entries)))
+
 (defn merge-hooks
-  "Merge new hooks with existing ones, avoiding duplicates."
+  "Merge brepl hooks with existing hooks, preserving non-brepl hooks."
   [existing-hooks new-hooks]
-  ;; For now, just replace with new hooks
-  ;; In production, would do smarter merging
-  new-hooks)
+  (reduce-kv
+   (fn [acc event-name new-entries]
+     (let [existing-entries (get acc event-name [])]
+       (assoc acc event-name (merge-hook-event existing-entries new-entries))))
+   existing-hooks
+   new-hooks))
 
 (defn find-brepl-resources
   "Find the brepl resources directory."
@@ -86,17 +105,66 @@
         {:success true :message "Skill removed from .claude/skills/brepl"})
       {:success true :message "Skill not found (already uninstalled)"})))
 
+(def hooks-template
+  ";; brepl stop hooks configuration
+
+{:stop
+ [;; Example: Run tests via nREPL after Claude stops
+  ;; {:type :repl
+  ;;  :code (clojure.test/run-tests)
+  ;;  :required? true    ; Must pass - Claude retries until success
+  ;;  :max-retries 10    ; Give up after 10 attempts (0 = infinite)
+  ;;  :timeout 120}
+
+  ;; Example: Run linter via bash
+  ;; {:type :bash
+  ;;  :command \"clj-kondo --lint src\"
+  ;;  :required? false   ; Optional - inform on failure but don't retry
+  ;;  :timeout 30}
+  ]}
+
+;; Hook fields:
+;;   :type        - :repl or :bash (required)
+;;   :required?   - if true: must pass, retry on failure (default: false)
+;;   :max-retries - max retry attempts, 0 = infinite (default: 10)
+;;   :timeout     - seconds before timeout (default: 60)
+;;
+;; REPL hooks:
+;;   :code        - Clojure code as s-expression or string (required)
+;;
+;; Bash hooks:
+;;   :command     - shell command to run (required)
+;;   :cwd         - working directory (default: \".\")
+;;   :env         - environment variables map (default: {})
+")
+
+(defn generate-hooks-template
+  "Generate .brepl/hooks.edn template if it doesn't exist."
+  []
+  (let [brepl-dir ".brepl"
+        hooks-file (str brepl-dir "/hooks.edn")]
+    (if (fs/exists? hooks-file)
+      {:created false :message "hooks.edn already exists"}
+      (do
+        (fs/create-dirs brepl-dir)
+        (spit hooks-file hooks-template)
+        {:created true :message "Created .brepl/hooks.edn template"}))))
+
 (defn install-hooks
   "Install brepl hooks to .claude/settings.local.json and brepl skill."
   [opts]
   (let [settings (read-settings)
+        existing-hooks (get settings :hooks {})
         new-hooks (brepl-hook-config opts)
-        updated-settings (assoc settings :hooks new-hooks)]
+        merged-hooks (merge-hooks existing-hooks new-hooks)
+        updated-settings (assoc settings :hooks merged-hooks)]
     (write-settings updated-settings)
-    (let [skill-result (install-skill)]
-      (if (:success skill-result)
-        {:success true :message "Hooks and skill installed successfully"}
-        {:success true :message (str "Hooks installed. " (:message skill-result))}))))
+    (let [skill-result (install-skill)
+          template-result (generate-hooks-template)]
+      {:success true
+       :message (str "Hooks installed successfully"
+                     (when (:created template-result)
+                       ". Created .brepl/hooks.edn template"))})))
 
 (defn uninstall-hooks
   "Remove brepl hooks from .claude/settings.local.json."

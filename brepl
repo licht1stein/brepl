@@ -740,8 +740,8 @@
           (if-not (:valid? validation)
             (do
               (binding [*out* *err*]
-                (println "Invalid .brepl/hooks.edn configuration:")
-                (println (pr-str (:errors validation))))
+                (println "Invalid .brepl/hooks.edn:")
+                (println (:errors validation)))
               (System/exit 1))
 
             ;; Run hooks

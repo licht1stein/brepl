@@ -89,14 +89,55 @@
 ;; Validation
 ;; =============================================================================
 
+(defn format-hook-error
+  "Format a single hook validation error in human-readable form."
+  [hook idx]
+  (let [hook-type (:type hook)
+        problems (cond-> []
+                   ;; Type validation
+                   (not (#{:repl :bash} hook-type))
+                   (conj (str "invalid :type " (pr-str hook-type) " (must be :repl or :bash)"))
+
+                   ;; REPL hook needs :code
+                   (and (= hook-type :repl) (not (:code hook)))
+                   (conj "missing :code field")
+
+                   ;; Bash hook needs :command
+                   (and (= hook-type :bash) (not (:command hook)))
+                   (conj (if (:cmd hook)
+                           "has :cmd but should be :command"
+                           "missing :command field"))
+
+                   ;; Type checks for optional fields
+                   (and (:timeout hook) (not (pos-int? (:timeout hook))))
+                   (conj ":timeout must be a positive integer")
+
+                   (and (:max-retries hook) (not (and (int? (:max-retries hook))
+                                                       (>= (:max-retries hook) 0))))
+                   (conj ":max-retries must be a non-negative integer")
+
+                   (and (contains? hook :required?) (not (boolean? (:required? hook))))
+                   (conj ":required? must be true or false"))]
+    (when (seq problems)
+      (str "Hook " (inc idx) ": " (str/join ", " problems)))))
+
+(defn format-validation-errors
+  "Format spec errors into human-readable messages."
+  [config]
+  (let [hooks (get config :stop [])]
+    (->> hooks
+         (map-indexed (fn [idx hook] (format-hook-error hook idx)))
+         (remove nil?)
+         (str/join "\n"))))
+
 (defn validate-hooks
   "Validate hooks config against specs.
-   Returns {:valid? true/false :errors [...]}."
+   Returns {:valid? true/false :errors str}."
   [config]
   (if (s/valid? ::hooks-config config)
-    {:valid? true :errors []}
+    {:valid? true :errors nil}
     {:valid? false
-     :errors (s/explain-data ::hooks-config config)}))
+     :errors (format-validation-errors config)}))
 
 ;; =============================================================================
 ;; State persistence (retry tracking)

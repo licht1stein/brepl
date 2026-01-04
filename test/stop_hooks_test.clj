@@ -131,20 +131,19 @@
 
 (deftest missing-required-field-schema-test
   (testing "Scenario: Missing required field"
-    (testing "Given a hook map missing the :name field"
+    (testing "Given a REPL hook missing the :code field"
       (with-temp-dir
         (fn [dir]
           (create-hooks-config dir
-            "{:stop [{:type :repl
-                      :code \"(+ 1 2)\"}]}")
+            "{:stop [{:type :repl}]}")
           (testing "When the schema is validated"
             (let [result (run-stop-hook dir)]
-              (testing "Then validation fails with explanation of missing field"
+              (testing "Then validation fails"
                 (is (= 1 (:exit result))
                     "Should exit 1 for validation error")
-                (is (re-find #"(?i)name|missing|required"
+                (is (re-find #"(?i)code|invalid"
                              (str (:err result)))
-                    "Should mention missing :name field")))))))))
+                    "Should mention missing :code field")))))))))
 
 (deftest invalid-field-type-schema-test
   (testing "Scenario: Invalid field type"
@@ -220,13 +219,13 @@
                       :code \"(run-tests)\"
                       :required? true}]}")
           ;; No .nrepl-port file, no server
-          (testing "When the stop hook executes"
+          (testing "When the stop hook executes first time"
             (let [result (run-stop-hook dir)]
-              (testing "Then the hook reports unavailable"
-                (is (= 1 (:exit result))
-                    "Should exit 1 for unavailable required hook"))
-              (testing "And outputs message asking Claude to pause and notify user"
-                (is (re-find #"(?i)nrepl|repl.*not.*available|require|pause|notify"
+              (testing "Then it blocks (exit 2) to force Claude to react"
+                (is (= 2 (:exit result))
+                    "Should exit 2 on first attempt to force Claude to inform user"))
+              (testing "And outputs message asking Claude to inform user"
+                (is (re-find #"(?i)nrepl|inform.*user|not.*running"
                              (str (:err result)))
                     "Should mention nREPL unavailable for required hook")))))))))
 
@@ -327,7 +326,7 @@
 
 (deftest track-retry-count-test
   (testing "Scenario: Track retry count across invocations"
-    (testing "Given a failing hook with :retry-on-failure? true"
+    (testing "Given a failing hook with :required? true"
       (with-temp-dir
         (fn [dir]
           (let [session-id (str "retry-test-" (System/currentTimeMillis))]
@@ -336,7 +335,7 @@
                 "{:stop [{:type :bash
                           :name \"always-fails\"
                           :command \"exit 1\"
-                          :retry-on-failure? true
+                          :required? true
                           :max-retries 5}]}")
               (testing "When invoked twice"
                 (let [result1 (run-stop-hook dir {:session-id session-id})
@@ -362,7 +361,7 @@
               (str "{:stop [{:type :bash
                              :name \"eventually-passes\"
                              :command \"count=$(cat counter); if [ $count -lt 2 ]; then echo $((count + 1)) > counter; exit 1; else exit 0; fi\"
-                             :retry-on-failure? true}]}"))
+                             :required? true}]}"))
             ;; Run hook 3 times - should fail, fail, succeed
             (testing "Given a hook that failed multiple times then succeeds"
               (run-stop-hook dir {:session-id session-id})
@@ -401,7 +400,7 @@
 
 (deftest blocking-hook-fails-retry-test
   (testing "Scenario: Blocking hook fails (retry)"
-    (testing "Given hook with :retry-on-failure? true that fails"
+    (testing "Given hook with :required? true that fails"
       (with-temp-dir
         (fn [dir]
           (let [session-id (str "blocking-retry-" (System/currentTimeMillis))]
@@ -410,7 +409,7 @@
                 "{:stop [{:type :bash
                           :name \"blocking-fail\"
                           :command \"exit 1\"
-                          :retry-on-failure? true
+                          :required? true
                           :max-retries 5}]}")
               (testing "And retry count < max-retries"
                 (testing "When run-stop-hooks executes"
@@ -423,7 +422,7 @@
 
 (deftest blocking-hook-exhausts-retries-test
   (testing "Scenario: Blocking hook exhausts retry limit"
-    (testing "Given hook with :retry-on-failure? true, :max-retries 3"
+    (testing "Given hook with :required? true, :max-retries 3"
       (with-temp-dir
         (fn [dir]
           (let [session-id (str "exhaust-retries-" (System/currentTimeMillis))]
@@ -432,7 +431,7 @@
                 "{:stop [{:type :bash
                           :name \"exhaust-retries\"
                           :command \"exit 1\"
-                          :retry-on-failure? true
+                          :required? true
                           :max-retries 3}]}")
               (testing "And hook has failed 3 times"
                 ;; Run 3 times to exhaust retries
@@ -453,14 +452,14 @@
 
 (deftest non-blocking-hook-fails-test
   (testing "Scenario: Non-blocking hook fails"
-    (testing "Given hook with :retry-on-failure? false that fails"
+    (testing "Given hook with :required? false that fails"
       (with-temp-dir
         (fn [dir]
           (create-hooks-config dir
             "{:stop [{:type :bash
                       :name \"non-blocking-fail\"
                       :command \"exit 1\"
-                      :retry-on-failure? false}]}")
+                      :required? false}]}")
           (testing "When run-stop-hooks executes"
             (let [result (run-stop-hook dir)]
               (testing "Then exit code is 1 (Claude informed, can stop)"

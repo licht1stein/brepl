@@ -10,12 +10,11 @@
 ;; Specs for hook validation
 ;; =============================================================================
 
-;; Common fields
+;; Common fields (same for REPL and bash)
 (s/def ::type #{:repl :bash})
 (s/def ::name string?)
-(s/def ::retry-on-failure? boolean?)
+(s/def ::required? boolean?)        ;; If true: retry on failure. If false: inform and proceed.
 (s/def ::max-retries (s/and int? (complement neg?)))
-(s/def ::required? boolean?)
 (s/def ::timeout pos-int?)
 
 ;; REPL-specific
@@ -28,12 +27,12 @@
 
 ;; Hook specs by type
 (s/def ::repl-hook
-  (s/keys :req-un [::type ::name ::code]
-          :opt-un [::retry-on-failure? ::max-retries ::required? ::timeout]))
+  (s/keys :req-un [::type ::code]
+          :opt-un [::name ::required? ::max-retries ::timeout]))
 
 (s/def ::bash-hook
-  (s/keys :req-un [::type ::name ::command]
-          :opt-un [::retry-on-failure? ::max-retries ::required? ::timeout ::cwd ::env]))
+  (s/keys :req-un [::type ::command]
+          :opt-un [::name ::required? ::max-retries ::timeout ::cwd ::env]))
 
 (s/def ::hook
   (s/or :repl (s/and ::repl-hook #(= (:type %) :repl))
@@ -49,17 +48,25 @@
 ;; =============================================================================
 
 (def defaults
-  {:retry-on-failure? false
+  {:required? false
    :max-retries 10
-   :required? false
    :timeout 60
    :cwd "."
    :env {}})
 
+(defn derive-name
+  "Derive hook name from command or code if not provided."
+  [hook]
+  (or (:name hook)
+      (let [source (or (:command hook) (:code hook) "hook")
+            truncated (subs source 0 (min 30 (count source)))]
+        (if (< (count source) 30) truncated (str truncated "...")))))
+
 (defn apply-defaults
   "Apply default values to a hook."
   [hook]
-  (merge defaults hook))
+  (-> (merge defaults hook)
+      (assoc :name (derive-name hook))))
 
 ;; =============================================================================
 ;; Configuration loading
@@ -165,9 +172,16 @@
 (def ^:dynamic *resolve-port-fn* nil)
 (def ^:dynamic *resolve-host-fn* nil)
 
+(defn connection-error?
+  "Check if error indicates nREPL server is not running."
+  [error-str]
+  (and error-str
+       (or (str/includes? error-str "Connection refused")
+           (str/includes? error-str "Connection reset"))))
+
 (defn execute-repl-hook
   "Execute Clojure code via nREPL.
-   Returns {:success? bool :output str :error str}."
+   Returns {:success? bool :output str :error str :no-server? bool}."
   [hook]
   (let [{:keys [code timeout required?]} (apply-defaults hook)
         port (when *resolve-port-fn* (*resolve-port-fn* nil nil))
@@ -178,7 +192,8 @@
       (if required?
         {:success? false
          :output ""
-         :error "nREPL not available but hook is required"}
+         :error "Inform the user that the hook won't work because nREPL server is not running. Offer to start it or ask the user to do it."
+         :no-server? true}
         {:success? true
          :output ""
          :error nil
@@ -196,17 +211,29 @@
              :error (str "Hook timed out after " timeout " seconds")}
             (let [{:keys [processed has-error?]} result
                   output (str/join "\n" (concat (:out processed) (:values processed)))
-                  error (when has-error?
-                          (or (:ex processed)
-                              (str/join "\n" (:err processed))
-                              "Evaluation error"))]
-              {:success? (not has-error?)
-               :output output
-               :error error})))
+                  error-msg (when has-error?
+                              (or (:ex processed)
+                                  (str/join "\n" (:err processed))
+                                  "Evaluation error"))]
+              ;; Check for connection errors (stale .nrepl-port file)
+              (if (connection-error? error-msg)
+                {:success? false
+                 :output ""
+                 :error "Inform the user that the hook won't work because nREPL server is not running. Offer to start it or ask the user to do it."
+                 :no-server? true}
+                {:success? (not has-error?)
+                 :output output
+                 :error error-msg}))))
         (catch Exception e
-          {:success? false
-           :output ""
-           :error (.getMessage e)}))
+          (let [msg (.getMessage e)]
+            (if (connection-error? msg)
+              {:success? false
+               :output ""
+               :error "Inform the user that the hook won't work because nREPL server is not running. Offer to start it or ask the user to do it."
+               :no-server? true}
+              {:success? false
+               :output ""
+               :error msg}))))
 
       :else
       {:success? false
@@ -219,19 +246,21 @@
 
 (defn execute-hook
   "Execute a single hook (REPL or bash).
-   Returns {:success? bool :output str :error str}."
+   Returns {:success? bool :output str :error str :no-server? bool}."
   [hook]
   (case (:type hook)
-    :repl (execute-repl-hook hook)
-    :bash (let [result (execute-bash-hook hook)]
-            ;; Normalize bash result to common format
+    :repl (execute-repl-hook hook)  ;; Returns :no-server? when nREPL unavailable
+    :bash (let [result (execute-bash-hook hook)
+                stdout (str/trim (or (:stdout result) ""))
+                stderr (str/trim (or (:stderr result) ""))
+                ;; Combine output for error context (Claude needs to see what failed)
+                combined-output (str/join "\n" (remove str/blank? [stdout stderr]))]
             {:success? (:success? result)
-             :output (str/trim (or (:stdout result) ""))
-             :error (let [stderr (str/trim (or (:stderr result) ""))]
-                      (if (str/blank? stderr)
-                        (when-not (:success? result)
-                          (str "Exit code " (:exit result)))
-                        stderr))})))
+             :output stdout
+             :error (when-not (:success? result)
+                      (if (str/blank? combined-output)
+                        (str "Exit code " (:exit result))
+                        (str "Exit code " (:exit result) "\n" combined-output)))})))
 
 (defn run-stop-hooks
   "Main orchestration function.
@@ -252,30 +281,50 @@
             (let [hook (first remaining)
                   hook-name (:name hook)
                   result (execute-hook hook)]
-              (if (:success? result)
+              (cond
                 ;; Hook passed - reset retry count, continue
+                (:success? result)
                 (recur (rest remaining)
                        (dissoc current-state hook-name))
-                ;; Hook failed
-                (let [retry-on-failure? (:retry-on-failure? hook)
+
+                ;; No server - first time: block (exit 2), second time: inform (exit 1)
+                (:no-server? result)
+                (let [no-server-key "__no-server__"
+                      seen-before? (contains? current-state no-server-key)]
+                  (if seen-before?
+                    ;; Second attempt - allow stopping
+                    (do
+                      (cleanup-state session-id)
+                      {:exit-code 1
+                       :message (:error result)})
+                    ;; First attempt - block, force Claude to react
+                    (do
+                      (write-state session-id (assoc current-state no-server-key true))
+                      {:exit-code 2
+                       :message (:error result)})))
+
+                ;; Hook failed - check retry logic
+                :else
+                (let [required? (:required? hook)
                       max-retries (:max-retries hook)
                       current-retries (get current-state hook-name 0)
                       new-retries (inc current-retries)
                       infinite-retries? (zero? max-retries)
                       within-limit? (or infinite-retries? (< current-retries max-retries))]
-                  (if (and retry-on-failure? within-limit?)
-                    ;; Retry - exit 2 to make Claude continue
+                  (if (and required? within-limit?)
+                    ;; Required hook - retry (exit 2 to make Claude continue)
                     (do
                       (write-state session-id (assoc current-state hook-name new-retries))
                       {:exit-code 2
                        :message (str "Hook '" hook-name "' failed (attempt " new-retries
                                      (when-not infinite-retries?
                                        (str "/" max-retries))
-                                     "): " (:error result))})
-                    ;; No retry or limit reached - exit 1, Claude informed
+                                     "). Fix the issues shown below and try again:\n"
+                                     (:error result))})
+                    ;; Optional hook or limit reached - inform (exit 1)
                     (do
                       (write-state session-id (dissoc current-state hook-name))
                       {:exit-code 1
-                       :message (if (and retry-on-failure? (not within-limit?))
+                       :message (if (and required? (not within-limit?))
                                   (str "Hook '" hook-name "' failed after " max-retries " retries: " (:error result))
                                   (str "Hook '" hook-name "' failed: " (:error result)))})))))))))))

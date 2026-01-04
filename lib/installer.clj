@@ -111,38 +111,31 @@
 {:stop
  [;; Example: Run tests via nREPL after Claude stops
   ;; {:type :repl
-  ;;  :name \"run-tests\"
   ;;  :code \"(clojure.test/run-tests)\"
-  ;;  :retry-on-failure? true  ; Claude keeps trying until tests pass
-  ;;  :max-retries 10          ; Give up after 10 attempts (0 = infinite)
-  ;;  :required? true          ; Inform user if no nREPL connection
+  ;;  :required? true    ; Must pass - Claude retries until success
+  ;;  :max-retries 10    ; Give up after 10 attempts (0 = infinite)
   ;;  :timeout 120}
 
   ;; Example: Run linter via bash
   ;; {:type :bash
-  ;;  :name \"lint\"
   ;;  :command \"clj-kondo --lint src\"
-  ;;  :retry-on-failure? false  ; Report failure but don't retry
-  ;;  :timeout 30
-  ;;  :cwd \".\"
-  ;;  :env {\"CI\" \"true\"}}
+  ;;  :required? false   ; Optional - inform on failure but don't retry
+  ;;  :timeout 30}
   ]}
 
 ;; Hook fields:
-;;   :type             - :repl or :bash (required)
-;;   :name             - identifier for error messages (required)
-;;   :retry-on-failure? - if true and fails, Claude retries (default: false)
-;;   :max-retries       - max retry attempts, 0 = infinite (default: 10)
-;;   :required?         - if true and can't run, inform user (default: false)
-;;   :timeout           - seconds before timeout (default: 60)
+;;   :type        - :repl or :bash (required)
+;;   :required?   - if true: must pass, retry on failure (default: false)
+;;   :max-retries - max retry attempts, 0 = infinite (default: 10)
+;;   :timeout     - seconds before timeout (default: 60)
 ;;
-;; REPL-specific:
-;;   :code             - Clojure code to evaluate (required for :repl)
+;; REPL hooks:
+;;   :code        - Clojure code to evaluate (required)
 ;;
-;; Bash-specific:
-;;   :command          - shell command to run (required for :bash)
-;;   :cwd              - working directory (default: \".\")
-;;   :env              - environment variables map (default: {})
+;; Bash hooks:
+;;   :command     - shell command to run (required)
+;;   :cwd         - working directory (default: \".\")
+;;   :env         - environment variables map (default: {})
 ")
 
 (defn generate-hooks-template

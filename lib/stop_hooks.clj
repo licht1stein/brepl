@@ -17,8 +17,8 @@
 (s/def ::max-retries (s/and int? (complement neg?)))
 (s/def ::timeout pos-int?)
 
-;; REPL-specific
-(s/def ::code string?)
+;; REPL-specific - code can be string or s-expression
+(s/def ::code (s/or :string string? :form list? :symbol symbol?))
 
 ;; Bash-specific
 (s/def ::command string?)
@@ -58,7 +58,8 @@
   "Derive hook name from command or code if not provided."
   [hook]
   (or (:name hook)
-      (let [source (or (:command hook) (:code hook) "hook")
+      (let [raw (or (:command hook) (:code hook) "hook")
+            source (if (string? raw) raw (pr-str raw))
             truncated (subs source 0 (min 30 (count source)))]
         (if (< (count source) 30) truncated (str truncated "...")))))
 
@@ -184,6 +185,8 @@
    Returns {:success? bool :output str :error str :no-server? bool}."
   [hook]
   (let [{:keys [code timeout required?]} (apply-defaults hook)
+        ;; Code can be string or s-expression - convert to string for nREPL
+        code-str (if (string? code) code (pr-str code))
         port (when *resolve-port-fn* (*resolve-port-fn* nil nil))
         host (when *resolve-host-fn* (*resolve-host-fn* nil))]
     (cond
@@ -203,7 +206,7 @@
       *nrepl-eval-fn*
       (try
         (let [timeout-ms (* timeout 1000)
-              result-future (future (*nrepl-eval-fn* host port code {:hook true}))
+              result-future (future (*nrepl-eval-fn* host port code-str {:hook true}))
               result (deref result-future timeout-ms ::timeout)]
           (if (= result ::timeout)
             {:success? false

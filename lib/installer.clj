@@ -111,7 +111,7 @@
 {:stop
  [;; Example: Run tests via nREPL after Claude stops
   ;; {:type :repl
-  ;;  :code \"(clojure.test/run-tests)\"
+  ;;  :code (clojure.test/run-tests)
   ;;  :required? true    ; Must pass - Claude retries until success
   ;;  :max-retries 10    ; Give up after 10 attempts (0 = infinite)
   ;;  :timeout 120}
@@ -130,7 +130,7 @@
 ;;   :timeout     - seconds before timeout (default: 60)
 ;;
 ;; REPL hooks:
-;;   :code        - Clojure code to evaluate (required)
+;;   :code        - Clojure code as s-expression or string (required)
 ;;
 ;; Bash hooks:
 ;;   :command     - shell command to run (required)

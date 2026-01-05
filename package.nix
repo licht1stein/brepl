@@ -6,7 +6,7 @@
 
 stdenv.mkDerivation rec {
   pname = "brepl";
-  version = "2.4.1";
+  version = "2.5.0";
 
   src = ./.;
 

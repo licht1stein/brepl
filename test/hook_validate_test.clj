@@ -1,10 +1,7 @@
 (ns hook-validate-test
   (:require [clojure.test :refer [deftest is testing]]
-            [clojure.string :as str]))
-
-;; Load validator lib
-(load-file "lib/validator.clj")
-(require '[brepl.lib.validator :as sut])
+            [clojure.string :as str]
+            [brepl.lib.validator :as sut]))
 
 ;; Tests
 

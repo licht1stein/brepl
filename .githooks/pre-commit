@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -e
+
+# Check if any source files are staged
+if git diff --cached --name-only | grep -q "^src/"; then
+    echo "Source files changed, rebuilding uberscript..."
+    bb build
+
+    # Stage the regenerated brepl if it changed
+    if ! git diff --quiet brepl 2>/dev/null; then
+        git add brepl
+        echo "Staged updated brepl"
+    fi
+fi

@@ -1,6 +1,7 @@
 (ns brepl.lib.installer
   "Hook installer for Claude Code integration."
   (:require [babashka.fs :as fs]
+            [brepl.lib.skill-content :as skill-content]
             [cheshire.core :as json]
             [clojure.string :as str]))
 
@@ -69,31 +70,14 @@
    existing-hooks
    new-hooks))
 
-(defn find-brepl-resources
-  "Find the brepl resources directory."
-  []
-  (let [;; Try current directory first (for development)
-        dev-path "resources/skills/brepl"
-        ;; Try relative to script file location
-        script-file (System/getProperty "babashka.file")
-        script-dir (when script-file (str (fs/parent script-file)))
-        script-resources (when script-dir (str script-dir "/resources/skills/brepl"))]
-    (cond
-      (and dev-path (fs/exists? dev-path)) dev-path
-      (and script-resources (fs/exists? script-resources)) script-resources
-      :else nil)))
-
 (defn install-skill
   "Install brepl skill to .claude/skills/brepl/."
   []
-  (let [resources-dir (find-brepl-resources)
-        target-dir ".claude/skills/brepl"]
-    (if resources-dir
-      (do
-        (fs/create-dirs target-dir)
-        (fs/copy-tree resources-dir target-dir {:replace-existing true})
-        {:success true :message "Skill installed to .claude/skills/brepl"})
-      {:success false :message "Could not find brepl skill resources"})))
+  (let [target-dir ".claude/skills/brepl"
+        skill-file (str target-dir "/SKILL.md")]
+    (fs/create-dirs target-dir)
+    (spit skill-file skill-content/skill-md)
+    {:success true :message "Skill installed to .claude/skills/brepl"}))
 
 (defn uninstall-skill
   "Remove brepl skill from .claude/skills/brepl/."

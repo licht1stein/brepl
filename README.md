@@ -223,11 +223,10 @@ For AI agents (and humans) working with Clojure code that contains complex quoti
 
 ```bash
 # Standard heredoc pattern - works for all cases
-brepl -e "$(cat <<'EOF'
+brepl <<'EOF'
 (require '[clojure.string :as str])
 (str/join ", " ["a" "b" "c"])
 EOF
-)"
 ```
 
 **Why use heredoc?**
@@ -241,28 +240,25 @@ EOF
 
 ```bash
 # Multi-line expressions with complex quoting
-brepl -e "$(cat <<'EOF'
+brepl <<'EOF'
 (println "String with 'single' and \"double\" quotes")
 (+ 10 20)
 EOF
-)"
 
 # Namespace reloading and testing
-brepl -e "$(cat <<'EOF'
+brepl <<'EOF'
 (require '[myapp.core] :reload)
 (myapp.core/some-function "test" 123)
 EOF
-)"
 
 # Data structures with nested quotes
-brepl -e "$(cat <<'EOF'
+brepl <<'EOF'
 (def config
   {:database {:host "localhost"
               :port 5432}
    :api {:key "secret-key"}})
 (println (:database config))
 EOF
-)"
 ```
 
 **Note**: Always use `<<'EOF'` (with single quotes) to prevent shell variable expansion. The brepl skill (installed via `brepl hooks install`) teaches Claude Code to use this pattern automatically.

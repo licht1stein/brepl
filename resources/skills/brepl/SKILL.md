@@ -29,16 +29,15 @@ EOF
 
 This is the simplest heredoc syntax - stdin feeds directly to brepl.
 
-### Alternative Syntax (Command Substitution)
+### Alternative Syntax (Positional Argument)
+
+For simple one-liners, you can use positional arguments:
 
 ```bash
-brepl "$(cat <<'EOF'
-(your clojure code here)
-EOF
-)"
+brepl '(+ 1 2 3)'
 ```
 
-Both work identically. Stdin syntax is shorter and cleaner.
+Heredoc is preferred for anything with quotes or multiple lines.
 
 **Note**: The `-e` flag is optional - brepl automatically treats stdin and positional arguments as code to evaluate.
 
@@ -66,17 +65,16 @@ EOF
 **Reloading and testing**:
 
 ```bash
-brepl "$(cat <<'EOF'
+brepl <<'EOF'
 (require '[myapp.core] :reload)
 (myapp.core/some-function "test" 123)
 EOF
-)"
 ```
 
 **Complex data structures**:
 
 ```bash
-brepl "$(cat <<'EOF'
+brepl <<'EOF'
 (def config
   {:database {:host "localhost"
               :port 5432
@@ -85,18 +83,16 @@ brepl "$(cat <<'EOF'
          :endpoint "https://api.example.com"}})
 (println (:database config))
 EOF
-)"
 ```
 
 **Running tests**:
 
 ```bash
-brepl "$(cat <<'EOF'
+brepl <<'EOF'
 (require '[clojure.test :refer [run-tests]])
 (require '[myapp.core-test] :reload)
 (run-tests 'myapp.core-test)
 EOF
-)"
 ```
 
 ## Alternative: Simple Expressions
@@ -108,13 +104,12 @@ For very simple expressions, you can use direct positional arguments:
 brepl '(inc 1)'
 
 # Same with heredoc (consistent approach)
-brepl "$(cat <<'EOF'
+brepl <<'EOF'
 (inc 1)
 EOF
-)"
 ```
 
-**Why prefer heredoc:** No mental overhead deciding which pattern to use, no risk of quoting issues, easy to extend. The `-e` flag is still available if you prefer explicit syntax.
+**Why prefer heredoc:** No mental overhead deciding which pattern to use, no risk of quoting issues, easy to extend.
 
 ## Loading Files
 

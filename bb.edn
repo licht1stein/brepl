@@ -52,6 +52,16 @@
   build {:doc "Generate uberscript from source"
          :task (do
                  (println "Building uberscript...")
+                 ;; Generate skill_content.clj from SKILL.md
+                 (let [skill-md (slurp "resources/skills/brepl/SKILL.md")
+                       escaped (-> skill-md
+                                   (clojure.string/replace "\\" "\\\\")
+                                   (clojure.string/replace "\"" "\\\""))
+                       content (str "(ns brepl.lib.skill-content\n"
+                                    "  \"Embedded skill content for uberscript distribution.\")\n\n"
+                                    "(def skill-md\n  \"" escaped "\")\n")]
+                   (spit "src/brepl/lib/skill_content.clj" content))
+                 (println "Generated skill_content.clj")
                  (babashka.fs/delete-if-exists "brepl")
                  (shell "bb uberscript brepl src/brepl.clj")
                  (let [content (slurp "brepl")]

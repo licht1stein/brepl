@@ -38,3 +38,6 @@ scratch/
 
 .direnv/
 tmp/
+
+# Generated during build
+src/brepl/lib/skill_content.clj

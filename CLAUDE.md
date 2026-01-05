@@ -20,6 +20,42 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 <!-- OPENSPEC:END -->
 
+## Development Workflow
+
+brepl uses uberscript for distribution. The `brepl` file in the repo is a generated artifact containing all dependencies bundled.
+
+### Source Structure
+
+```
+src/brepl.clj       - Main entry point
+src/brepl/lib/      - Library modules (validator, installer, etc.)
+bb.edn              - Paths + deps (parmezan for bracket-fixing)
+brepl               - Generated uberscript (committed)
+```
+
+### Making Changes
+
+1. Edit source files in `src/`
+2. Run `bb build` to regenerate the uberscript
+3. Test with `./brepl --version` or `bb test`
+4. Commit both source changes and regenerated `brepl`
+
+```bash
+# Edit source
+vim src/brepl/lib/validator.clj
+
+# Rebuild
+bb build
+
+# Test
+bb test
+./brepl balance /tmp/test.clj --dry-run
+
+# Commit
+git add src/ brepl
+git commit -m "Your changes"
+```
+
 ## Version Management
 
 ### Bumping Versions
@@ -34,9 +70,10 @@ bb version-bump major   # 2.1.0 -> 3.0.0
 
 This automatically updates:
 
-- `brepl` - main script version string
+- `src/brepl.clj` - source version string
 - `package.nix` - Nix derivation version
 - `README.md` - installation example version
+- Regenerates `brepl` uberscript via `bb build`
 
 ### Release Procedure
 

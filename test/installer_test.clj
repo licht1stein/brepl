@@ -6,11 +6,8 @@
   (:require [clojure.test :refer [deftest is testing]]
             [babashka.fs :as fs]
             [clojure.java.io :as io]
-            [cheshire.core :as json]))
-
-;; Load installer lib
-(load-file "lib/installer.clj")
-(require '[brepl.lib.installer :as sut])
+            [cheshire.core :as json]
+            [brepl.lib.installer :as sut]))
 
 ;; =============================================================================
 ;; Test Helpers

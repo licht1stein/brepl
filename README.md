@@ -108,7 +108,14 @@ brepl -f script.clj
 bbin install io.github.licht1stein/brepl
 ```
 
-### Option 2: Install with Nix
+### Option 2: Direct download (curl)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/licht1stein/brepl/master/brepl -o ~/.local/bin/brepl
+chmod +x ~/.local/bin/brepl
+```
+
+### Option 3: Install with Nix
 
 ```nix
 { pkgs ? import <nixpkgs> {} }:
@@ -128,7 +135,7 @@ pkgs.mkShell {
 
 Then run `nix-shell` to enter a shell with brepl available.
 
-### Option 3: Manual Installation
+### Option 4: Manual Installation
 
 ```bash
 git clone https://github.com/licht1stein/brepl.git

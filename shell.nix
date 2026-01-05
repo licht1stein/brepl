@@ -6,6 +6,7 @@ pkgs.mkShell {
   ];
 
   shellHook = ''
+    git config core.hooksPath .githooks
     echo "brepl development environment"
     echo "- babashka: $(bb --version)"
   '';

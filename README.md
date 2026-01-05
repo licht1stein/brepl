@@ -36,10 +36,10 @@ Assuming brepl is already installed (see [Installation](#installation)):
 bb nrepl-server
 
 # Install hooks and skill in your project
-brepl hook install
+brepl hooks install
 ```
 
-The `brepl hook install` command configures Claude Code to:
+The `brepl hooks install` command configures Claude Code to:
 
 - Validate and auto-fix brackets before every file edit
 - Evaluate changed Clojure files in your running REPL after edits
@@ -88,7 +88,7 @@ brepl -f script.clj
 - **Automatic evaluation** - Files are evaluated in REPL immediately after editing
 - **Early error feedback** - AI agents see evaluation errors right away, not later
 - **Session-based backups** - Automatic backup/restore protects against bad edits
-- **One-command setup** - `brepl hook install` enables everything in seconds
+- **One-command setup** - `brepl hooks install` enables everything in seconds
 
 ### Versatile CLI Client
 
@@ -165,12 +165,15 @@ ln -s $(pwd)/brepl ~/.local/bin/brepl
 ### Hook Subcommands
 
 ```bash
-brepl hook install              # Install hooks to .claude/settings.local.json (includes skill)
-brepl hook uninstall            # Remove hooks
-brepl hook validate <file> <content>  # Pre-edit validation with auto-fix
-brepl hook eval <file>          # Post-edit evaluation
-brepl hook session-end <id>     # Cleanup session backups
+brepl hooks install              # Install hooks to .claude/settings.local.json (includes skill)
+brepl hooks uninstall            # Remove hooks
+brepl hooks validate <file> <content>  # Pre-edit validation with auto-fix
+brepl hooks eval <file>          # Post-edit evaluation
+brepl hooks stop                 # Run stop hooks from .brepl/hooks.edn
+brepl hooks session-end          # Cleanup session backups (reads JSON from stdin)
 ```
+
+**Note**: `hook` works as an alias for `hooks` for backward compatibility.
 
 ### Skill Commands
 
@@ -179,7 +182,7 @@ brepl skill install             # Install brepl skill to .claude/skills/brepl
 brepl skill uninstall           # Remove brepl skill
 ```
 
-**Note**: The skill is automatically installed when you run `brepl hook install`. Use `brepl skill install` only if you want to install the skill separately without hooks.
+**Note**: The skill is automatically installed when you run `brepl hooks install`. Use `brepl skill install` only if you want to install the skill separately without hooks.
 
 **What the skill teaches Claude:**
 
@@ -262,7 +265,7 @@ EOF
 )"
 ```
 
-**Note**: Always use `<<'EOF'` (with single quotes) to prevent shell variable expansion. The brepl skill (installed via `brepl hook install`) teaches Claude Code to use this pattern automatically.
+**Note**: Always use `<<'EOF'` (with single quotes) to prevent shell variable expansion. The brepl skill (installed via `brepl hooks install`) teaches Claude Code to use this pattern automatically.
 
 ### Port Configuration
 
@@ -450,11 +453,11 @@ Claude (and other LLMs) often struggle with Lisp parentheses, leading to syntax 
 
 #### Quick Setup for Claude Code
 
-The `brepl hook install` command configures your project for Claude Code by creating or updating `.claude/settings.local.json`:
+The `brepl hooks install` command configures your project for Claude Code by creating or updating `.claude/settings.local.json`:
 
 ```bash
 # In your Clojure project directory:
-brepl hook install
+brepl hooks install
 ```
 
 This installs three hooks that run automatically during Claude Code sessions:
@@ -467,40 +470,40 @@ Once installed, Claude can edit your Clojure files without worrying about parent
 
 #### Hook Commands
 
-**`brepl hook install`**
+**`brepl hooks install`**
 Creates or updates `.claude/settings.local.json` to configure Claude Code hooks for the current project. This file tells Claude Code to run brepl for validation and evaluation on every Clojure file edit. Idempotent—safe to run multiple times.
 
-**`brepl hook validate <file> <content>`**
+**`brepl hooks validate <file> <content>`**
 Pre-edit syntax validation with automatic bracket correction. Recursively closes unclosed brackets and braces using the edamame parser. Returns corrected code or blocks with detailed error messages.
 
 ```bash
 # Auto-fixes unclosed brackets
-brepl hook validate src/core.clj "(defn foo ["
+brepl hooks validate src/core.clj "(defn foo ["
 # => {"decision":"allow","correction":"(defn foo [])"}
 
 # Blocks unfixable syntax errors
-brepl hook validate src/core.clj "\"unclosed string"
+brepl hooks validate src/core.clj "\"unclosed string"
 # => {"decision":"block","reason":"Syntax error..."}
 ```
 
-**`brepl hook eval <file>`**
+**`brepl hooks eval <file>`**
 Post-edit validation and optional nREPL evaluation. Validates syntax first, then evaluates via nREPL if available. Warnings don't block—development stays fluid while catching real errors.
 
 ```bash
 # With nREPL running - evaluates and warns on errors
-brepl hook eval src/core.clj
+brepl hooks eval src/core.clj
 # => {"decision":"allow","warning":"Undefined symbol..."}
 
 # Without nREPL - validates syntax only
-brepl hook eval src/core.clj
+brepl hooks eval src/core.clj
 # => {"decision":"allow"}  # Graceful degradation
 ```
 
-**`brepl hook uninstall`**
+**`brepl hooks uninstall`**
 Removes hooks from `.claude/settings.local.json` cleanly.
 
-**`brepl hook session-end <session-id>`**
-Cleanup command (called automatically by Claude Code) that removes session backup files.
+**`brepl hooks session-end`**
+Cleanup command (called automatically by Claude Code) that removes session backup files. Reads JSON from stdin.
 
 #### How It Works
 
@@ -533,8 +536,8 @@ Hooks work with brepl's project-aware port discovery (v1.3.0+). When evaluating 
 #       └── src/handler.clj
 
 # Each file evaluates against its own REPL
-brepl hook eval ~/projects/service-a/src/api.clj      # port 7000
-brepl hook eval ~/projects/service-b/src/handler.clj  # port 8000
+brepl hooks eval ~/projects/service-a/src/api.clj      # port 7000
+brepl hooks eval ~/projects/service-b/src/handler.clj  # port 8000
 ```
 
 #### Design Philosophy: Pragmatic Integration

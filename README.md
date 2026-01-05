@@ -124,7 +124,7 @@ let
   brepl = pkgs.callPackage (pkgs.fetchFromGitHub {
     owner = "licht1stein";
     repo = "brepl";
-    rev = "v2.5.0";
+    rev = "v2.5.1";
     hash = "sha256-r9ly0xrPj0ciMWJwrJkZPxUEhycuxfsNOTXw+PerR34=";
   } + "/package.nix") {};
 in

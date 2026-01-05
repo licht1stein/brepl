@@ -580,6 +580,27 @@ Perfect for developers who want reliable AI assistance without managing multiple
 
 ## Development
 
+### Setup
+
+```bash
+# Enter development shell (configures git hooks automatically)
+nix-shell
+
+# Or manually configure hooks
+git config core.hooksPath .githooks
+```
+
+### Building
+
+brepl uses uberscript for distribution. The `brepl` file in the repo is generated from `src/`.
+
+```bash
+# Rebuild after editing source
+bb build
+
+# The pre-commit hook rebuilds automatically when src/ changes
+```
+
 ### Running Tests
 
 The project includes a comprehensive test suite. To run tests:

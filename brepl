@@ -256,10 +256,14 @@
              :error (str "Hook timed out after " timeout " seconds")}
             (let [{:keys [processed has-error?]} result
                   output (str/join "\n" (concat (:out processed) (:values processed)))
+                  ;; Combine exception class and stderr for full error context
                   error-msg (when has-error?
-                              (or (:ex processed)
-                                  (str/join "\n" (:err processed))
-                                  "Evaluation error"))]
+                              (let [parts (cond-> []
+                                            (:ex processed) (conj (:ex processed))
+                                            (seq (:err processed)) (into (:err processed)))]
+                                (if (seq parts)
+                                  (str/join "\n" parts)
+                                  "Evaluation error")))]
               ;; Check for connection errors (stale .nrepl-port file)
               (if (connection-error? error-msg)
                 {:success? false

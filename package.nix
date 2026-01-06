@@ -23,7 +23,8 @@ stdenv.mkDerivation rec {
 
     # Wrap to ensure babashka is on PATH
     wrapProgram $out/bin/brepl \
-      --prefix PATH : ${lib.makeBinPath [ babashka ]}
+      --prefix PATH : ${lib.makeBinPath [ babashka ]} \
+      --set BABASHKA_CLASSPATH ""
 
     runHook postInstall
   '';

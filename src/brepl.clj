@@ -76,7 +76,8 @@
   (println "    brepl -f script.clj")
   (println "    brepl -m '{\"op\" \"describe\"}'")
   (println "    brepl -p 7888 '(println \"Hello\")'")
-  (println "    BREPL_PORT=7888 brepl '(+ 1 2)'"))
+  (println "    BREPL_PORT=7888 brepl '(+ 1 2)'")
+  (println "    brepl balance src/core.clj     # Fix unbalanced brackets"))
 
 (defn read-nrepl-port []
   (when (.exists (io/file ".nrepl-port"))

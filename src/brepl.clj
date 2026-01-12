@@ -51,9 +51,11 @@
   (println "    brepl [OPTIONS] <<'EOF' ... EOF")
   (println "    brepl [OPTIONS] -f <file>")
   (println "    brepl [OPTIONS] -m <message>")
-  (println "    brepl hooks <subcommand> [args]")
-  (println "    brepl skill <subcommand>")
-  (println "    brepl balance <file> [--dry-run]")
+  (println "")
+  (println "    brepl hooks <subcommand> [args]    Manage claude-code hooks")
+  (println "    brepl eca <subcommand>             Manage ECA hooks")
+  (println "    brepl skill <subcommand>           Manage brepl skill installation")
+  (println "    brepl balance <file> [--dry-run]   Fix unbalanced brackets/parens in Clojure files")
   (println)
   (println "OPTIONS:")
   (println (cli/format-opts {:spec cli-spec :order [:e :f :m :h :p :verbose :version :help]}))
@@ -389,8 +391,8 @@
       (let [result (cond
                      (:e opts) (eval-expression host port (:e opts) opts)
                      (:f opts) (eval-file host port (:f opts) opts)
-                   (:m opts) (do (process-raw-message host port (:m opts) opts)
-                                 false))] ; raw messages don't track errors
+                     (:m opts) (do (process-raw-message host port (:m opts) opts)
+                                   false))] ; raw messages don't track errors
 
         ;; Handle hook mode
         (if (:hook opts)
@@ -436,8 +438,8 @@
                   {:hookEventName "PreToolUse"
                    :permissionDecision "allow"}} 0))
   ([event-name] (json-exit {:hookSpecificOutput
-                             {:hookEventName event-name
-                              :permissionDecision "allow"}} 0))
+                            {:hookEventName event-name
+                             :permissionDecision "allow"}} 0))
   ([tool-name tool-input fixed-content]
    (let [updated-input (case tool-name
                          "Edit" (assoc tool-input :new_string fixed-content)
@@ -484,9 +486,9 @@
       (let [debug-mode? (some #(= "--debug" %) args)
             ;; Read stdin as string if debug mode, otherwise use stream
             hook-data (if debug-mode?
-                       (let [raw-input (slurp *in*)]
-                         (json/parse-string raw-input true))
-                       (json/parse-stream *in* true))
+                        (let [raw-input (slurp *in*)]
+                          (json/parse-string raw-input true))
+                        (json/parse-stream *in* true))
             {:keys [tool_name tool_input]} hook-data
             {:keys [file_path content old_string new_string]} tool_input]
 
@@ -721,7 +723,7 @@
 
 (defn handle-install [args]
   (let [opts (cli/parse-opts args {:spec {:strict-eval {:coerce :boolean}
-                                           :debug {:coerce :boolean}}})
+                                          :debug {:coerce :boolean}}})
         status (installer/check-status)]
     (installer/install-hooks opts)
     (println "Installing Claude Code hooks...")
@@ -938,6 +940,236 @@
           remaining-args (rest args)]
       (handle-skill-subcommand subcommand remaining-args))))
 
+;; ECA (Editor Code Assistant) hook support
+;; ECA uses different JSON format than Claude Code hooks
+
+(defn eca-json-exit
+  "Exit with ECA-format JSON response"
+  [response exit-code]
+  (println (json/generate-string response))
+  (System/exit exit-code))
+
+(defn eca-allow
+  "Allow the tool call (ECA format)"
+  ([] (eca-json-exit {:suppressOutput true} 0))
+  ([context] (eca-json-exit {:suppressOutput false
+                             :additionalContext context} 0)))
+
+(defn eca-allow-with-update
+  "Allow with updated tool input (ECA format)"
+  [updated-input context]
+  (eca-json-exit {:suppressOutput false
+                  :updatedInput updated-input
+                  :additionalContext context} 0))
+
+(defn eca-deny
+  "Deny the tool call (ECA format)"
+  [reason]
+  (eca-json-exit {:approval "deny"
+                  :additionalContext reason} 2))
+
+(defn get-eca-hook-input
+  "Parse ECA hook JSON from stdin.
+   Returns [tool-name file-path content tool-input] or nils on error.
+   ECA tools use 'path' for file path, 'content' for write_file,
+   'original_content'/'new_content' for edit_file."
+  []
+  (try
+    (let [hook-data (json/parse-stream *in* true)
+          {:keys [tool_name tool_input]} hook-data
+          ;; Strip server prefix if present (e.g., eca__write_file -> write_file)
+          tool-name-clean (if (str/includes? (or tool_name "") "__")
+                            (second (str/split tool_name #"__"))
+                            tool_name)
+          {:keys [path content original_content new_content]} tool_input]
+      (debug-log (str "ECA Hook - Tool: " tool_name " File: " path))
+      (case tool-name-clean
+        "write_file" [tool-name-clean path content tool_input]
+        "edit_file"  [tool-name-clean path new_content tool_input]
+        [nil nil nil nil]))
+    (catch Exception e
+      (debug-log (str "ERROR parsing ECA stdin: " (.getMessage e)))
+      [nil nil nil nil])))
+
+(defn handle-eca-validate
+  "Handle ECA preToolCall validation for Clojure files.
+   Validates bracket balance and auto-fixes if possible."
+  [args]
+  (let [[tool-name file-path content tool-input] (get-eca-hook-input)]
+    ;; No file path or not a file tool - allow
+    (when (or (nil? file-path) (nil? tool-name))
+      (eca-allow))
+
+    ;; Not a Clojure file - allow
+    (when-not (validator/clojure-file? file-path content)
+      (eca-allow))
+
+    ;; For edit_file: simulate the edit result
+    ;; For write_file: use content directly
+    (let [file-exists? (.exists (io/file file-path))
+          current-file (when file-exists? (slurp file-path))
+          {:keys [original_content new_content]} tool-input
+
+          result-file (case tool-name
+                        "write_file" content
+                        "edit_file" (if (and current-file original_content new_content)
+                                      (apply-edit current-file original_content new_content)
+                                      content)
+                        content)]
+
+      (when (nil? result-file)
+        (eca-deny "Could not simulate edit - original_content not found in file"))
+
+      ;; Try to validate/fix brackets
+      (if-let [fixed (validator/auto-fix-brackets result-file)]
+        (if (= fixed result-file)
+          ;; Already balanced - allow as-is
+          (eca-allow)
+          ;; Needs fixing
+          (case tool-name
+            "write_file"
+            (eca-allow-with-update
+             {:path file-path :content fixed}
+             "Auto-fixed unbalanced brackets in Clojure file")
+
+            "edit_file"
+            (if-let [adjusted (adjust-new-string-for-fix new_content result-file fixed)]
+              (eca-allow-with-update
+               (assoc tool-input :new_content adjusted)
+               "Auto-fixed unbalanced brackets in Clojure file")
+              ;; Complex change - allow and let post-hook balance
+              (eca-allow "Warning: bracket fix may be needed after edit"))
+
+            (eca-allow)))
+        ;; Unfixable
+        (eca-deny (str "Syntax error in " file-path ": unable to auto-fix delimiter errors"))))))
+
+(defn get-eca-post-tool-input
+  "Parse ECA postToolCall hook JSON from stdin.
+   Returns [file-path tool-input] or nils on error.
+   postToolCall receives: tool_name, server, tool_input, tool_response, error"
+  []
+  (try
+    (let [hook-data (json/parse-stream *in* true)
+          {:keys [tool_name tool_input error]} hook-data
+          ;; Strip server prefix if present
+          tool-name-clean (if (str/includes? (or tool_name "") "__")
+                            (second (str/split tool_name #"__"))
+                            tool_name)
+          {:keys [path]} tool_input]
+      (debug-log (str "ECA postToolCall - Tool: " tool_name " File: " path " Error: " error))
+      (when (and (contains? #{"write_file" "edit_file"} tool-name-clean)
+                 (not error))
+        [path tool_input]))
+    (catch Exception e
+      (debug-log (str "ERROR parsing ECA postToolCall stdin: " (.getMessage e)))
+      nil)))
+
+(defn handle-eca-eval
+  "Handle ECA postToolCall evaluation for Clojure files.
+   Balances brackets after file operations and evaluates via nREPL if available."
+  [_args]
+  (let [[file-path _tool-input] (get-eca-post-tool-input)]
+    ;; No file path or tool errored - silently allow
+    (when (nil? file-path)
+      (eca-allow))
+
+    ;; File doesn't exist - allow
+    (when-not (.exists (io/file file-path))
+      (eca-allow))
+
+    ;; Not a Clojure file - allow
+    (when-not (validator/clojure-file? file-path)
+      (eca-allow))
+
+    ;; Balance brackets after the tool operation
+    (let [balance-report (balance-file! file-path)]
+
+      ;; Evaluate file via nREPL if available
+      (if-let [port (resolve-port nil file-path)]
+        (let [result (eval-file (resolve-host nil) port file-path {:hook true})
+              eval-msg (when (:has-error? result)
+                         (str "Evaluation error: " (get-in result [:processed :ex] "Unknown error")))
+              reason (str/join "\n" (remove nil? [balance-report eval-msg]))]
+          (if (seq reason)
+            (eca-json-exit {:suppressOutput false
+                            :additionalContext reason} 0)
+            (eca-allow)))
+        ;; No nREPL available - just report balance fixes if any
+        (if balance-report
+          (eca-json-exit {:suppressOutput false
+                          :additionalContext balance-report} 0)
+          (eca-allow))))))
+
+(defn handle-eca-session-end
+  "Handle ECA sessionEnd hook for cleanup.
+   Cleans up backup files and stop hook state."
+  [_args]
+  (let [input (try
+                (json/parse-stream *in* true)
+                (catch Exception e
+                  (debug-log (str "Error parsing ECA sessionEnd JSON: " (.getMessage e)))
+                  {}))
+        ;; ECA doesn't have session_id, use a default or derive from workspaces
+        session-id (or (:session_id input)
+                       (first (:workspaces input))
+                       "eca-session")]
+    (backup/cleanup-session session-id)
+    (stop-hooks/cleanup-state session-id)
+    (eca-json-exit {:suppressOutput true} 0)))
+
+(defn handle-eca-install [_args]
+  (let [result (installer/install-eca-hooks)]
+    (println "Installing ECA hooks...")
+    (println (:message result))
+    (println)
+    (println "Config file:" (:config-path result))
+    (System/exit 0)))
+
+(defn handle-eca-uninstall [_args]
+  (let [result (installer/uninstall-eca-hooks)]
+    (println "Removing ECA hooks...")
+    (println (:message result))
+    (System/exit 0)))
+
+(defn show-eca-help [subcommand]
+  (println "brepl eca - ECA (Editor Code Assistant) hook integration")
+  (println)
+  (println "USAGE:")
+  (println "    brepl eca install")
+  (println "    brepl eca uninstall")
+  (println "    brepl eca validate")
+  (println "    brepl eca eval")
+  (println "    brepl eca session-end")
+  (println)
+  (println "SUBCOMMANDS:")
+  (println "    install        Install brepl hooks to .eca/config.json")
+  (println "    uninstall      Remove brepl hooks from .eca/config.json")
+  (println "    validate       Validate Clojure file syntax before write/edit (preToolCall hook)")
+  (println "    eval           Evaluate Clojure file after write/edit (postToolCall hook)")
+  (println "    session-end    Clean up session backup files (sessionEnd hook)")
+  (let [help-flags #{"-h" "--help" "-?"}
+        is-help? (or (nil? subcommand) (contains? help-flags subcommand))
+        is-valid? (contains? #{"validate" "eval" "session-end" "install" "uninstall"} subcommand)]
+    (System/exit (if (or is-help? is-valid?) 0 1))))
+
+(defn handle-eca-subcommand [subcommand args]
+  (case subcommand
+    "validate"    (handle-eca-validate args)
+    "eval"        (handle-eca-eval args)
+    "session-end" (handle-eca-session-end args)
+    "install"     (handle-eca-install args)
+    "uninstall"   (handle-eca-uninstall args)
+    (show-eca-help subcommand)))
+
+(defn -main-eca
+  "Handle brepl eca subcommands"
+  [args]
+  (if (empty? args)
+    (handle-eca-subcommand nil nil)
+    (let [subcommand (first args)
+          remaining-args (rest args)]
+      (handle-eca-subcommand subcommand remaining-args))))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (cond
@@ -952,6 +1184,10 @@
     (and (> (count *command-line-args*) 0)
          (= "balance" (first *command-line-args*)))
     (-main-balance (rest *command-line-args*))
+
+    (and (> (count *command-line-args*) 0)
+         (= "eca" (first *command-line-args*)))
+    (-main-eca (rest *command-line-args*))
 
     :else
     (apply -main *command-line-args*)))

@@ -1,6 +1,6 @@
 ---
 name: brepl
-description: **MANDATORY** - Load this skill BEFORE using brepl in any way. Teaches the heredoc pattern for reliable code evaluation.
+description: "MANDATORY - Load this skill BEFORE using brepl in any way. Teaches the heredoc pattern for reliable code evaluation."
 ---
 
 # brepl - Evaluating Clojure Code

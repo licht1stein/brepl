@@ -11,7 +11,8 @@
             [brepl.lib.validator :as validator]
             [brepl.lib.backup :as backup]
             [brepl.lib.installer :as installer]
-            [brepl.lib.stop-hooks :as stop-hooks])
+            [brepl.lib.stop-hooks :as stop-hooks]
+            [brepl.lib.file-tracker :as file-tracker])
   (:import [java.net Socket]
            [java.io PushbackInputStream]))
 
@@ -459,6 +460,22 @@
       (debug-log (str "ERROR parsing stdin: " (.getMessage e)))
       nil)))
 
+
+(defn parse-hook-input
+  "Parse raw hook input from stdin. Returns the full hook data map."
+  [args]
+  (try
+    (let [debug-mode? (some #(= "--debug" %) args)
+          hook-data (if debug-mode?
+                      (let [raw-input (slurp *in*)]
+                        (json/parse-string raw-input true))
+                      (json/parse-stream *in* true))]
+      (when debug-mode?
+        (save-hook-debug-json (:tool_name hook-data) hook-data))
+      hook-data)
+    (catch Exception e
+      (debug-log (str "ERROR parsing stdin: " (.getMessage e)))
+      nil)))
 (defn get-hook-input [args]
   (if (>= (count args) 2)
     [(first args) (second args) nil nil]
@@ -527,57 +544,80 @@
       ;; Complex change - can't adjust simply
       :else nil)))
 
+(defn emacs-edit-command?
+  "Check if a Bash command is an emacs editing command (el, ew, ed, es, ei, etc.)"
+  [command]
+  (when command
+    (boolean (re-find #"^(el|ew|ed|es|ei|eu|esr|ess|esw|esk|est)\s" command))))
+
 (defn handle-validate [args]
-  (let [[file-path content tool-name tool-input] (get-hook-input args)]
-    (when (or (nil? file-path) (nil? content))
-      (block-hook "Could not parse hook input"))
+  (let [hook-data (parse-hook-input args)
+        session-id (:session_id hook-data)
+        tool-name (:tool_name hook-data)
+        tool-input (:tool_input hook-data)]
 
-    (when-not (validator/clojure-file? file-path content)
-      (allow-hook))
+    ;; Always take a snapshot for file change detection
+    (when session-id
+      (file-tracker/snapshot! session-id))
 
-    ;; For Edit: validate the full file after applying the edit
-    ;; For Write: validate the content directly
-    (let [file-exists? (.exists (io/file file-path))
-          current-file (when file-exists? (slurp file-path))
-          {:keys [old_string new_string]} tool-input
+    ;; For non-Edit/Write/Bash tools, just allow
+    (when-not (#{"Edit" "Write" "Bash"} tool-name)
+      (allow-hook "PreToolUse"))
 
-          ;; Compute what the file will look like after this operation
-          result-file (case tool-name
-                        "Write" content
-                        "Edit" (if (and current-file old_string new_string)
-                                 (apply-edit current-file old_string new_string)
-                                 content)
-                        content)]
+    ;; For Bash: only validate if it looks like an emacs edit command
+    (when (= "Bash" tool-name)
+      (let [command (:command tool-input)]
+        (when-not (emacs-edit-command? command)
+          (allow-hook "PreToolUse"))
+        ;; For emacs commands, allow - emacs handles bracket fixing
+        (allow-hook "PreToolUse")))
 
-      (when (nil? result-file)
-        (block-hook "Could not simulate edit - old_string not found in file"))
+    ;; For Edit/Write: do bracket validation
+    (let [{:keys [file_path content old_string new_string]} tool-input
+          file-path file_path]
 
-      ;; Try to validate/fix brackets with parmezan on the FULL result
-      (if-let [fixed (validator/auto-fix-brackets result-file)]
-        (do
-          ;; Create backup if in Claude Code session
-          (when-let [session-id (System/getenv "SESSION_ID")]
-            (backup/create-backup file-path session-id))
+      ;; Skip if no file path or not a Clojure file
+      (when (or (nil? file-path) (nil? (or content new_string)))
+        (allow-hook "PreToolUse"))
 
-          (if (= fixed result-file)
-            ;; Already balanced - allow as-is
-            (allow-hook)
-            ;; Needs fixing
-            (case tool-name
-              ;; For Write: we can fix directly
-              "Write"
-              (allow-hook tool-name tool-input fixed)
+      (when-not (validator/clojure-file? file-path (or content new_string ""))
+        (allow-hook "PreToolUse"))
 
-              ;; For Edit: try to adjust new_string based on end delta
-              "Edit"
-              (if-let [adjusted (adjust-new-string-for-fix new_string result-file fixed)]
-                (allow-hook tool-name tool-input adjusted)
-                ;; Complex change - allow and let PostToolUse balance-file! fix it
-                (allow-hook))
+      ;; Compute what the file will look like after this operation
+      (let [file-exists? (.exists (io/file file-path))
+            current-file (when file-exists? (slurp file-path))
+            result-file (case tool-name
+                          "Write" content
+                          "Edit" (if (and current-file old_string new_string)
+                                   (apply-edit current-file old_string new_string)
+                                   content)
+                          content)]
 
-              (allow-hook))))
-        ;; If parmezan couldn't fix it at all, block
-        (block-hook (str "Syntax error in " file-path ": unable to auto-fix delimiter errors"))))))
+        (when (nil? result-file)
+          (block-hook "PreToolUse" "Could not simulate edit - old_string not found in file"))
+
+        ;; Try to validate/fix brackets with parmezan
+        (if-let [fixed (validator/auto-fix-brackets result-file)]
+          (do
+            ;; Create backup if in Claude Code session
+            (when session-id
+              (backup/create-backup file-path session-id))
+
+            (if (= fixed result-file)
+              (allow-hook "PreToolUse")
+              ;; Needs fixing
+              (case tool-name
+                "Write"
+                (allow-hook tool-name tool-input fixed)
+
+                "Edit"
+                (if-let [adjusted (adjust-new-string-for-fix new_string result-file fixed)]
+                  (allow-hook tool-name tool-input adjusted)
+                  (allow-hook "PreToolUse"))
+
+                (allow-hook "PreToolUse"))))
+          ;; If parmezan couldn't fix it at all, block
+          (block-hook "PreToolUse" (str "Syntax error in " file-path ": unable to auto-fix delimiter errors")))))))
 
 (defn diff-lines
   "Compare original and fixed content, return info about changed lines."
@@ -633,34 +673,49 @@
           report)))))
 
 (defn handle-eval [args]
-  (let [file-path (if (empty? args) (get-file-path-from-stdin) (first args))]
-    (when (nil? file-path)
-      (block-hook "PostToolUse" "Could not get file path"))
+  (let [hook-data (parse-hook-input args)
+        session-id (:session_id hook-data)]
 
-    (when-not (.exists (io/file file-path))
-      (block-hook "PostToolUse" (str "File not found: " file-path)))
+    ;; No session = no tracking, just allow
+    (when-not session-id
+      (allow-hook "PostToolUse"))
 
-    ;; Balance brackets before evaluation
-    (let [balance-report (balance-file! file-path)]
+    ;; Detect changed files
+    (let [changed-files (file-tracker/detect-changes session-id)]
 
-      ;; Evaluate file via nREPL if available
-      (if-let [port (resolve-port nil file-path)]
-        (let [result (eval-file (resolve-host nil) port file-path {:hook true})
-              eval-msg (when (:has-error? result)
-                         (str "Evaluation error: " (get-in result [:processed :ex] "Unknown error")))
-              reason (str/join "\n" (remove nil? [balance-report eval-msg]))]
-          (if (seq reason)
-            (json-exit {:hookSpecificOutput
-                        {:hookEventName "PostToolUse"
-                         :permissionDecision "allow"
-                         :permissionDecisionReason reason}} 0)
-            (allow-hook "PostToolUse")))
-        ;; No nREPL available
-        (if balance-report
+      ;; No changes detected
+      (when (empty? changed-files)
+        (allow-hook "PostToolUse"))
+
+      ;; Balance and reload each changed file
+      (let [port (resolve-port nil nil)
+            host (resolve-host nil)
+            results (for [file-path changed-files
+                          :when (and (validator/clojure-file? file-path)
+                                     (.exists (io/file file-path)))]
+                      (let [balance-report (balance-file! file-path)
+                            eval-result (when port
+                                          (eval-file host port file-path {:hook true}))
+                            eval-error (when (:has-error? eval-result)
+                                         (get-in eval-result [:processed :ex] "Unknown error"))]
+                        {:file file-path
+                         :balanced balance-report
+                         :error eval-error}))
+            messages (->> results
+                          (mapcat (fn [{:keys [file balanced error]}]
+                                    (cond-> []
+                                      balanced (conj (str "Fixed brackets in " file))
+                                      error (conj (str "Error in " file ": " error)))))
+                          (remove nil?))]
+
+        ;; Update snapshot for next comparison
+        (file-tracker/snapshot! session-id)
+
+        (if (seq messages)
           (json-exit {:hookSpecificOutput
                       {:hookEventName "PostToolUse"
                        :permissionDecision "allow"
-                       :permissionDecisionReason balance-report}} 0)
+                       :permissionDecisionReason (str/join "\n" messages)}} 0)
           (allow-hook "PostToolUse"))))))
 
 (defn handle-install [args]
@@ -694,6 +749,8 @@
     (backup/cleanup-session session-id)
     ;; Also cleanup stop hook state
     (stop-hooks/cleanup-state session-id)
+    ;; Cleanup file tracker state
+    (file-tracker/cleanup-state session-id)
     (System/exit 0)))
 
 (defn handle-stop [_args]

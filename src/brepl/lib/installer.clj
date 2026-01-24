@@ -33,14 +33,14 @@
   "Generate brepl hook configuration for Claude Code."
   [opts]
   (let [debug-flag (when (:debug opts) " --debug")]
-    {:PreToolUse [{:matcher "Edit|Write"
-                   :hooks [{:type "command"
-                            :command (str "brepl hook validate" debug-flag)
-                            :continueOnError false}]}]
-     :PostToolUse [{:matcher "Edit|Write"
+     {:PreToolUse [{:matcher "Edit|Write|Bash"
                     :hooks [{:type "command"
-                             :command (str "brepl hook eval" debug-flag)
-                             :continueOnError (not (:strict-eval opts))}]}]
+                             :command (str "brepl hook validate" debug-flag)
+                             :continueOnError false}]}]
+      :PostToolUse [{:matcher ""
+                     :hooks [{:type "command"
+                              :command (str "brepl hook eval" debug-flag)
+                              :continueOnError (not (:strict-eval opts))}]}]
      :Stop [{:matcher ""
              :hooks [{:type "command"
                       :command (str "brepl hook stop" debug-flag)}]}]

@@ -21,9 +21,13 @@ stdenv.mkDerivation rec {
     cp brepl $out/bin/brepl
     chmod +x $out/bin/brepl
 
-    # Wrap to ensure babashka is on PATH
+    # Replace shebang with simple version (env -S not reliable in Nix)
+    sed -i '1s|#!/usr/bin/env.*|#!/usr/bin/env bb|' $out/bin/brepl
+
+    # Wrap to ensure babashka is on PATH and isolate from local bb.edn
     wrapProgram $out/bin/brepl \
-      --prefix PATH : ${lib.makeBinPath [ babashka ]}
+      --prefix PATH : ${lib.makeBinPath [ babashka ]} \
+      --set BABASHKA_CLASSPATH ""
 
     runHook postInstall
   '';

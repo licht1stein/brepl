@@ -1,4 +1,4 @@
-#!/usr/bin/env bb
+#!/usr/bin/env -S bb --classpath ""
 (ns brepl.lib.file-tracker
   "Track file changes across tool uses for automatic REPL reloading.
    Uses mtime (modification time) for O(n) stat calls instead of reading files."

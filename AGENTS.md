@@ -16,3 +16,7 @@ Use `@/openspec/AGENTS.md` to learn:
 Keep this managed block so 'openspec update' can refresh the instructions.
 
 <!-- OPENSPEC:END -->
+
+## GitHub Etiquette
+
+- **Always thank contributors** by name with @ mention when merging PRs or including their work in releases (e.g., "Thanks to @username! (#PR)")

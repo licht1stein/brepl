@@ -104,6 +104,8 @@ When merging a PR that requires a new release:
    gh release create v2.1.1 --title "v2.1.1" --notes "Release notes here"
    ```
 
+   **Always thank contributors** by name with @ mention when their PR is included in a release (e.g., "Thanks to @username for the contribution! (#PR)").
+
 5. **Update Nix hash** (after tag is pushed)
 
    ```bash

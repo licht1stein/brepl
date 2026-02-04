@@ -65,6 +65,6 @@
                  (babashka.fs/delete-if-exists "brepl")
                  (shell "bb uberscript brepl src/brepl.clj")
                  (let [content (slurp "brepl")]
-                   (spit "brepl" (str "#!/usr/bin/env bb\n" content)))
+                   (spit "brepl" (str "#!/usr/bin/env -S bb --classpath \"\"\n" content)))
                  (shell "chmod +x brepl")
                  (println "Done. Generated: brepl"))}}}

@@ -53,7 +53,7 @@
   (println "    brepl [OPTIONS] -m <message>")
   (println "    brepl hooks <subcommand> [args]")
   (println "    brepl skill <subcommand>")
-  (println "    brepl balance <file> [--write]")
+  (println "    brepl balance <file> [--dry-run]")
   (println)
   (println "OPTIONS:")
   (println (cli/format-opts {:spec cli-spec :order [:e :f :m :h :p :verbose :version :help]}))
@@ -77,7 +77,8 @@
   (println "    brepl -f script.clj")
   (println "    brepl -m '{\"op\" \"describe\"}'")
   (println "    brepl -p 7888 '(println \"Hello\")'")
-  (println "    BREPL_PORT=7888 brepl '(+ 1 2)'"))
+  (println "    BREPL_PORT=7888 brepl '(+ 1 2)'")
+  (println "    brepl balance src/core.clj     # Fix unbalanced brackets"))
 
 (defn read-nrepl-port []
   (when (.exists (io/file ".nrepl-port"))
@@ -856,11 +857,12 @@
   (System/exit 0))
 
 (defn handle-balance [args]
-  (let [dry-run? (some #(= "--dry-run" %) args)
-        file-args (remove #(= "--dry-run" %) args)
+  (let [help? (some #(contains? #{"-h" "--help" "-?"} %) args)
+        dry-run? (some #(= "--dry-run" %) args)
+        file-args (remove #(contains? #{"-h" "--help" "-?" "--dry-run"} %) args)
         file-path (first file-args)]
     (cond
-      (nil? file-path)
+      (or help? (nil? file-path))
       (show-balance-help)
 
       (not (.exists (io/file file-path)))

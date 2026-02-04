@@ -40,5 +40,3 @@ scratch/
 tmp/
 .brepl/
 
-# Generated during build
-src/brepl/lib/skill_content.clj

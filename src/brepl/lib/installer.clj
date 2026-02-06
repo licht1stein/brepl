@@ -172,3 +172,98 @@
     {:installed has-hooks
      :settings-path (settings-local-path)
      :hooks (when has-hooks (:hooks settings))}))
+
+;; ECA (Editor Code Assistant) hook installer support
+
+(defn eca-config-path []
+  ".eca/config.json")
+
+(defn read-eca-config
+  "Read existing .eca/config.json or return empty map."
+  []
+  (let [path (eca-config-path)]
+    (if (fs/exists? path)
+      (try
+        (json/parse-string (slurp path) true)
+        (catch Exception e
+          (println "Warning: Could not parse existing .eca/config.json")
+          {}))
+      {})))
+
+(defn write-eca-config
+  "Write config to .eca/config.json."
+  [config]
+  (let [path (eca-config-path)
+        parent-dir (fs/parent path)]
+    ;; Ensure parent directory exists
+    (when parent-dir
+      (fs/create-dirs parent-dir))
+    ;; Write config file
+    (spit path (json/generate-string config {:pretty true}))))
+
+(defn brepl-eca-hook-config
+  "Generate brepl hook configuration for ECA."
+  []
+  {:brepl-validate
+   {:type "preToolCall"
+    :matcher "eca__(write_file|edit_file)"
+    :actions [{:type "shell"
+               :shell "brepl eca validate"}]}
+   :brepl-eval
+   {:type "postToolCall"
+    :matcher "eca__(write_file|edit_file)"
+    :actions [{:type "shell"
+               :shell "brepl eca eval"}]}
+   :brepl-session-end
+   {:type "sessionEnd"
+    :actions [{:type "shell"
+               :shell "brepl eca session-end"}]}})
+
+(defn brepl-eca-hook?
+  "Check if a hook key belongs to brepl."
+  [hook-key]
+  (str/starts-with? (name hook-key) "brepl-"))
+
+(defn install-eca-hooks
+  "Install brepl hooks to .eca/config.json."
+  []
+  (let [config (read-eca-config)
+        existing-hooks (get config :hooks {})
+        new-hooks (brepl-eca-hook-config)
+        ;; Remove existing brepl hooks and add new ones
+        non-brepl-hooks (into {} (remove (fn [[k _]] (brepl-eca-hook? k)) existing-hooks))
+        merged-hooks (merge non-brepl-hooks new-hooks)
+        updated-config (assoc config :hooks merged-hooks)]
+    (write-eca-config updated-config)
+    {:success true
+     :message "ECA hooks installed successfully"
+     :config-path (eca-config-path)}))
+
+(defn uninstall-eca-hooks
+  "Remove brepl hooks from .eca/config.json."
+  []
+  (let [config (read-eca-config)
+        existing-hooks (get config :hooks {})
+        non-brepl-hooks (into {} (remove (fn [[k _]] (brepl-eca-hook? k)) existing-hooks))
+        updated-config (if (empty? non-brepl-hooks)
+                         (dissoc config :hooks)
+                         (assoc config :hooks non-brepl-hooks))
+        path (eca-config-path)]
+    (if (empty? updated-config)
+      ;; If no other config, remove file
+      (when (fs/exists? path)
+        (fs/delete path))
+      ;; Otherwise just update
+      (write-eca-config updated-config))
+    {:success true :message "ECA hooks uninstalled successfully"}))
+
+(defn check-eca-status
+  "Check ECA hook installation status."
+  []
+  (let [config (read-eca-config)
+        hooks (get config :hooks {})
+        has-brepl-hooks (some brepl-eca-hook? (keys hooks))]
+    {:installed has-brepl-hooks
+     :config-path (eca-config-path)
+     :hooks (when has-brepl-hooks
+              (into {} (filter (fn [[k _]] (brepl-eca-hook? k)) hooks)))}))

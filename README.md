@@ -52,7 +52,7 @@ Now Claude can write Clojure code confidently without worrying about parentheses
 
 ### For ECA (Editor Code Assistant)
 
-brepl also supports [ECA](https://github.com/anthropics/eca), Anthropic's editor-agnostic coding assistant:
+brepl also supports [ECA](https://github.com/editor-code-assistant/eca), an open source editor-agnostic AI pair programming tool:
 
 ```bash
 # Start your nREPL server

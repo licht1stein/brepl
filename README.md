@@ -3,17 +3,17 @@
 [![GitHub release](https://img.shields.io/github/v/release/licht1stein/brepl?label=version)](https://github.com/licht1stein/brepl/releases/latest)
 [![Run Tests](https://github.com/licht1stein/brepl/actions/workflows/test.yml/badge.svg)](https://github.com/licht1stein/brepl/actions/workflows/test.yml)
 
-**B**racket-fixing **REPL** for Claude Code and other AI-assisted Clojure development.
+**B**racket-fixing **REPL** for AI-assisted Clojure development.
 
 ## What is brepl?
 
-**brepl** (Bracket-fixing REPL) enables AI-assisted Clojure development by solving the notorious parenthesis problem. It's primarily designed for [Claude Code](https://claude.ai/claude-code) through its hook system, providing three essential capabilities:
+**brepl** (Bracket-fixing REPL) enables AI-assisted Clojure development by solving the notorious parenthesis problem. It fully supports [Claude Code](https://claude.ai/claude-code) and [ECA](https://eca.dev) (Editor Code Assistant) through their hook systems, providing three essential capabilities:
 
 1. **🔧 Automatic bracket fixing** - Intelligently corrects mismatched parentheses, brackets, and braces using [parmezan](https://github.com/borkdude/parmezan)
 2. **⚡ Simple REPL evaluation** - Gives AI agents a straightforward way to evaluate code in your running REPL, enabling truly interactive development
 3. **🔄 Live file synchronization** - Automatically evaluates edited files in the REPL, providing early feedback on evaluation errors before they become problems
 
-**Primary use case:** Claude Code and other AI coding agents that need reliable Clojure syntax handling and immediate REPL feedback.
+**Primary use case:** Claude Code, ECA, and other AI coding agents that need reliable Clojure syntax handling and immediate REPL feedback.
 
 **Versatile tool:** While designed for AI workflows, brepl is equally capable as a lightweight CLI nREPL client for one-shot evaluations, scripts, and automation—making it useful for both AI-assisted and traditional development workflows.
 
@@ -52,7 +52,7 @@ Now Claude can write Clojure code confidently without worrying about parentheses
 
 ### For ECA (Editor Code Assistant)
 
-brepl also supports [ECA](https://github.com/editor-code-assistant/eca), an open source editor-agnostic AI pair programming tool:
+brepl fully supports [ECA](https://eca.dev) ([GitHub](https://github.com/editor-code-assistant/eca)), an open source editor-agnostic AI pair programming tool:
 
 ```bash
 # Start your nREPL server

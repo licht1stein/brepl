@@ -50,6 +50,20 @@ The `brepl hooks install` command configures Claude Code to:
 
 Now Claude can write Clojure code confidently without worrying about parentheses or missing REPL feedback.
 
+### For ECA (Editor Code Assistant)
+
+brepl also supports [ECA](https://github.com/anthropics/eca), Anthropic's editor-agnostic coding assistant:
+
+```bash
+# Start your nREPL server
+bb nrepl-server
+
+# Install ECA hooks in your project
+brepl eca install
+```
+
+The `brepl eca install` command configures ECA via `.eca/config.json` with the same capabilities as Claude Code hooks—bracket validation, auto-fix, and REPL evaluation.
+
 ### For Command-Line Usage
 
 ```bash

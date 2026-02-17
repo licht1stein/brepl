@@ -35,41 +35,45 @@
            vec))))
 
 (defn validate-nrepl-port [host port]
-  (let [socket (Socket. host (int port))]
-    (try
-      (.setSoTimeout socket 2000)
-      (let [out (.getOutputStream socket)
-            in (PushbackInputStream. (.getInputStream socket))]
-        (bencode/write-bencode out {"op" "describe" "id" "discovery"})
-        (.flush out)
-        (let [response (bencode/read-bencode in)
-              str-keys (into {} (map (fn [[k v]] [(->str k) (->str v)])) response)]
-          (contains? str-keys "ops")))
-      (catch Exception _ false)
-      (finally (.close socket)))))
+  (try
+    (let [socket (Socket. host (int port))]
+      (try
+        (.setSoTimeout socket 2000)
+        (let [out (.getOutputStream socket)
+              in (PushbackInputStream. (.getInputStream socket))]
+          (bencode/write-bencode out {"op" "describe" "id" "discovery"})
+          (.flush out)
+          (let [response (bencode/read-bencode in)
+                str-keys (into {} (map (fn [[k v]] [(->str k) (->str v)])) response)]
+            (contains? str-keys "ops")))
+        (catch Exception _ false)
+        (finally (.close socket))))
+    (catch Exception _ false)))
 
 (defn get-nrepl-cwd [host port]
-  (let [socket (Socket. host (int port))]
-    (try
-      (.setSoTimeout socket 2000)
-      (let [out (.getOutputStream socket)
-            in (PushbackInputStream. (.getInputStream socket))]
-        (bencode/write-bencode out {"op" "eval"
-                                    "code" "(System/getProperty \"user.dir\")"
-                                    "id" "discovery-cwd"})
-        (.flush out)
-        (loop [value nil]
-          (let [response (bencode/read-bencode in)
-                status-set (some->> (get response "status") (map ->str) set)
-                v (or value
-                      (when-let [raw (get response "value")]
-                        (let [s (->str raw)]
-                          (str/replace s #"^\"|\"$" ""))))]
-            (if (contains? status-set "done")
-              v
-              (recur v)))))
-      (catch Exception _ nil)
-      (finally (.close socket)))))
+  (try
+    (let [socket (Socket. host (int port))]
+      (try
+        (.setSoTimeout socket 2000)
+        (let [out (.getOutputStream socket)
+              in (PushbackInputStream. (.getInputStream socket))]
+          (bencode/write-bencode out {"op" "eval"
+                                      "code" "(System/getProperty \"user.dir\")"
+                                      "id" "discovery-cwd"})
+          (.flush out)
+          (loop [value nil]
+            (let [response (bencode/read-bencode in)
+                  status-set (some->> (get response "status") (map ->str) set)
+                  v (or value
+                        (when-let [raw (get response "value")]
+                          (let [s (->str raw)]
+                            (str/replace s #"^\"|\"$" ""))))]
+              (if (contains? status-set "done")
+                v
+                (recur v)))))
+        (catch Exception _ nil)
+        (finally (.close socket))))
+    (catch Exception _ nil)))
 
 (defn discover-nrepl-port []
   (when-let [output (get-listening-ports)]

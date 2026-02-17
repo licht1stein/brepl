@@ -279,13 +279,14 @@ EOF
 
 ### Port Configuration
 
-The **port is required** and resolved in this order:
+The port is resolved in this order:
 
 1. **Command line:** `-p 7888`
 2. **Auto-detect:** `.nrepl-port` file
    - For `-f` flag: searches from the file's directory upward (v1.3.0+)
    - For `-e`/`-m` flags: uses current directory
 3. **Environment:** `BREPL_PORT=7888`
+4. **Process scanning:** discovers running nREPL servers automatically (see below)
 
 ```bash
 # Explicit port
@@ -297,12 +298,12 @@ BREPL_PORT=7888 brepl -e '(+ 1 2)'
 # Auto-detect from .nrepl-port (most common)
 brepl -e '(+ 1 2)'
 
-# NEW in v1.3.0: File-based project detection
-# If you have multiple projects with different nREPL servers:
-#   project1/.nrepl-port (port 7000)
-#   project2/.nrepl-port (port 8000)
-brepl -f project1/src/core.clj  # Uses port 7000
-brepl -f project2/src/app.clj   # Uses port 8000
+# Zero-config: just works if an nREPL server is running in this directory
+brepl '(+ 1 2)'
+
+# File-based project detection (v1.3.0+)
+brepl -f project1/src/core.clj  # Uses port from project1/.nrepl-port
+brepl -f project2/src/app.clj   # Uses port from project2/.nrepl-port
 ```
 
 #### Project-Aware Port Discovery (v1.3.0+)
@@ -329,6 +330,34 @@ This is especially useful when:
 - Working with monorepos containing multiple services
 - Switching between different projects frequently
 - Using editor integrations that operate on individual files
+
+#### Stateless Process Auto-Discovery
+
+When no `.nrepl-port` file or `BREPL_PORT` variable is found, brepl automatically scans for running nREPL servers that match your current working directory. This is completely stateless — no configuration files, no caching, no session persistence.
+
+**How it works:**
+
+1. Runs `lsof` to find TCP ports listened on by Java, Clojure, or Babashka processes
+2. Checks all candidate ports **in parallel** (via `pmap`)
+3. For each port, opens a **single TCP connection** that validates the nREPL protocol and retrieves the server's working directory
+4. Returns the first port whose working directory matches yours
+
+```bash
+# Start an nREPL server (no .nrepl-port file needed)
+bb nrepl-server 1667 &
+
+# brepl finds it automatically
+brepl '(+ 1 2)'
+# => 3
+```
+
+**Performance:** Real nREPL servers respond in under 5ms on localhost. Non-nREPL ports are rejected within 100ms. With parallel scanning, discovery typically completes in ~100-200ms even with many Java processes running.
+
+**When is this useful?**
+
+- Development environments where `.nrepl-port` files aren't generated
+- Quick REPL sessions without explicit port configuration
+- AI agents that need zero-config nREPL access
 
 ### Remote Connections
 
@@ -573,10 +602,11 @@ Perfect for developers who want reliable AI assistance without managing multiple
 
 ## Troubleshooting
 
-**Error: No port specified, no .nrepl-port file found, and BREPL_PORT not set**
+**Error: No port specified, no .nrepl-port file found, BREPL_PORT not set, and no nREPL process found**
 
 - Start an nREPL server first: `bb nrepl-server`
 - Or specify port manually: `brepl -p 7888 -e "(+ 1 2)"`
+- Make sure the nREPL server was started from the same directory you're running brepl in (for auto-discovery)
 
 **Error connecting to nREPL server**
 

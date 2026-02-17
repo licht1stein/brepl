@@ -8,11 +8,12 @@
             [clojure.pprint :as pp]
             [clojure.walk :as walk]
             [cheshire.core :as json]
-            [brepl.lib.validator :as validator]
-            [brepl.lib.backup :as backup]
-            [brepl.lib.installer :as installer]
-            [brepl.lib.stop-hooks :as stop-hooks]
-            [brepl.lib.file-tracker :as file-tracker])
+             [brepl.lib.validator :as validator]
+             [brepl.lib.backup :as backup]
+             [brepl.lib.installer :as installer]
+             [brepl.lib.stop-hooks :as stop-hooks]
+             [brepl.lib.file-tracker :as file-tracker]
+             [brepl.lib.discovery :as discovery])
   (:import [java.net Socket]
            [java.io PushbackInputStream]))
 
@@ -30,8 +31,8 @@
        :ref "<host>"
        :default "localhost"
        :default-desc "localhost or BREPL_HOST"}
-   :p {:desc "nREPL port (required - auto-detects from .nrepl-port or BREPL_PORT)"
-       :ref "<port>"}
+    :p {:desc "nREPL port (auto-detects from .nrepl-port, BREPL_PORT, or process scan)"
+        :ref "<port>"}
    :verbose {:desc "Show raw nREPL messages instead of parsed output"
              :coerce :boolean}
    :version {:desc "Show brepl version"
@@ -60,14 +61,15 @@
   (println "OPTIONS:")
   (println (cli/format-opts {:spec cli-spec :order [:e :f :m :h :p :verbose :version :help]}))
   (println)
-  (println "PORT RESOLUTION:")
-  (println "    Port is resolved in the following order:")
-  (println "    1. -p <port> command line argument")
-  (println "    2. .nrepl-port file:")
-  (println "       - For -f: searches from file's directory upward to find project-specific port")
-  (println "       - For -e/-m: uses .nrepl-port in current directory")
-  (println "    3. BREPL_PORT environment variable")
-  (println "    4. Error if none found")
+   (println "PORT RESOLUTION:")
+   (println "    Port is resolved in the following order:")
+   (println "    1. -p <port> command line argument")
+   (println "    2. .nrepl-port file:")
+   (println "       - For -f: searches from file's directory upward to find project-specific port")
+   (println "       - For -e/-m: uses .nrepl-port in current directory")
+   (println "    3. BREPL_PORT environment variable")
+   (println "    4. Process scanning: finds running Java/Clojure/Babashka nREPL servers matching current directory")
+   (println "    5. Error if none found")
   (println)
   (println "EXAMPLES:")
   (println "    brepl '(+ 1 2 3)'              # Positional argument (implicit -e)")
@@ -135,7 +137,8 @@
          ;; For -e and -m options: use current directory
          (read-nrepl-port))
        (when-let [env-port (get-env-var "BREPL_PORT")]
-         (Integer/parseInt env-port)))))
+         (Integer/parseInt env-port))
+       (discovery/discover-nrepl-port))))
 
 (defn stdin-available?
   "Check if stdin has data available without blocking"
@@ -384,9 +387,9 @@
                  (assoc parsed :e stdin-input)
                  parsed)]
 
-      (when-not port
-        (println "Error: No port specified, no .nrepl-port file found, and BREPL_PORT not set")
-        (System/exit 1))
+       (when-not port
+         (println "Error: No nREPL port found. Tried: -p flag, .nrepl-port file, BREPL_PORT env var, and process scanning.")
+         (System/exit 1))
 
       (let [result (cond
                      (:e opts) (eval-expression host port (:e opts) opts)

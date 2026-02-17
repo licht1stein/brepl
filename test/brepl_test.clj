@@ -267,7 +267,7 @@
   (testing "No port available"
     (let [result (run-brepl "-e" "(+ 1 1)")]
       (is (= 1 (:exit result)))
-      (is (str/includes? (:out result) "No port specified")))))
+      (is (str/includes? (:out result) "No nREPL port found")))))
 
 ;; Connection error tests
 

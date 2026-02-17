@@ -1,0 +1,1 @@
+Help text generation skipped due to script hang

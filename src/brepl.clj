@@ -17,7 +17,7 @@
   (:import [java.net Socket]
            [java.io PushbackInputStream]))
 
-(def version "2.7.0")
+(def version "2.7.1")
 
 (def cli-spec
   {:e {:desc "Expression to evaluate (everything after -e is treated as code)"

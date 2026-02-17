@@ -1,0 +1,19 @@
+
+Running tests in #{"test"}
+
+Testing brepl-test
+
+Testing eca-test
+
+Testing hook-integration-test
+
+Testing hook-validate-test
+
+Testing installer-test
+
+Testing positional-args-test
+
+Testing stop-hooks-test
+
+Ran 61 tests containing 252 assertions.
+0 failures, 0 errors.

@@ -34,43 +34,39 @@
            distinct
            vec))))
 
-(defn validate-nrepl-port [host port]
+(defn- gather-port-info
+  "Validate a port and get its CWD in a single TCP connection.
+   Returns the port number if it's a valid nREPL matching the target CWD, nil otherwise.
+   Uses 100ms socket timeout — real nREPL servers respond in <5ms on localhost."
+  [host port target-cwd]
   (try
     (let [socket (Socket. host (int port))]
       (try
-        (.setSoTimeout socket 2000)
+        (.setSoTimeout socket 100)
         (let [out (.getOutputStream socket)
               in (PushbackInputStream. (.getInputStream socket))]
+          ;; Step 1: validate nREPL with describe
           (bencode/write-bencode out {"op" "describe" "id" "discovery"})
           (.flush out)
           (let [response (bencode/read-bencode in)
                 str-keys (into {} (map (fn [[k v]] [(->str k) (->str v)])) response)]
-            (contains? str-keys "ops")))
-        (catch Exception _ false)
-        (finally (.close socket))))
-    (catch Exception _ false)))
-
-(defn get-nrepl-cwd [host port]
-  (try
-    (let [socket (Socket. host (int port))]
-      (try
-        (.setSoTimeout socket 2000)
-        (let [out (.getOutputStream socket)
-              in (PushbackInputStream. (.getInputStream socket))]
-          (bencode/write-bencode out {"op" "eval"
-                                      "code" "(System/getProperty \"user.dir\")"
-                                      "id" "discovery-cwd"})
-          (.flush out)
-          (loop [value nil]
-            (let [response (bencode/read-bencode in)
-                  status-set (some->> (get response "status") (map ->str) set)
-                  v (or value
-                        (when-let [raw (get response "value")]
-                          (let [s (->str raw)]
-                            (str/replace s #"^\"|\"$" ""))))]
-              (if (contains? status-set "done")
-                v
-                (recur v)))))
+            (when (contains? str-keys "ops")
+              ;; Step 2: get CWD on the same connection
+              (bencode/write-bencode out {"op" "eval"
+                                          "code" "(System/getProperty \"user.dir\")"
+                                          "id" "discovery-cwd"})
+              (.flush out)
+              (loop [value nil]
+                (let [resp (bencode/read-bencode in)
+                      status-set (some->> (get resp "status") (map ->str) set)
+                      v (or value
+                            (when-let [raw (get resp "value")]
+                              (let [s (->str raw)]
+                                (str/replace s #"^\"|\"$" ""))))]
+                  (if (contains? status-set "done")
+                    (when (and v (= target-cwd (str (fs/canonicalize v))))
+                      port)
+                    (recur v)))))))
         (catch Exception _ nil)
         (finally (.close socket))))
     (catch Exception _ nil)))
@@ -79,11 +75,7 @@
   (when-let [output (get-listening-ports)]
     (let [ports (parse-lsof-output output)
           cwd (str (fs/canonicalize (fs/cwd)))]
-      (reduce (fn [_ port]
-                (when (validate-nrepl-port "localhost" port)
-                  (when-let [remote-cwd (get-nrepl-cwd "localhost" port)]
-                    (let [remote-canonical (str (fs/canonicalize remote-cwd))]
-                      (when (= cwd remote-canonical)
-                        (reduced port))))))
-              nil
-              ports))))
+      (when (seq ports)
+        (->> ports
+             (pmap #(gather-port-info "localhost" % cwd))
+             (some identity))))))

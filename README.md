@@ -7,7 +7,7 @@
 
 ## What is brepl?
 
-**brepl** (Bracket-fixing REPL) enables AI-assisted Clojure development by solving the notorious parenthesis problem. It fully supports [Claude Code](https://claude.ai/claude-code), [ECA](https://eca.dev) (Editor Code Assistant) and OpenCode (via external [plugin](https://github.com/alekseysotnikov/brepl-opencode-plugin)) through their hook systems, providing three essential capabilities:
+**brepl** (Bracket-fixing REPL) enables AI-assisted Clojure development by solving the notorious parenthesis problem. It fully supports [Claude Code](https://claude.ai/claude-code), [ECA](https://eca.dev) (Editor Code Assistant) and [OpenCode](https://opencode.ai) (via external [plugin](https://github.com/alekseysotnikov/brepl-opencode-plugin)) through their hook systems, providing three essential capabilities:
 
 1. **🔧 Automatic bracket fixing** - Intelligently corrects mismatched parentheses, brackets, and braces using [parmezan](https://github.com/borkdude/parmezan)
 2. **⚡ Simple REPL evaluation** - Gives AI agents a straightforward way to evaluate code in your running REPL, enabling truly interactive development

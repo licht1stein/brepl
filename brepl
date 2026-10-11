@@ -551,52 +551,32 @@
 (def skill-md
   "---
 name: brepl
-description: \"MANDATORY - Load this skill BEFORE using brepl in any way. Teaches the heredoc pattern for reliable code evaluation.\"
+description: \"Evaluate Clojure code and use the REPL via brepl. Load this skill before using brepl.\"
 ---
 
-# brepl - Evaluating Clojure Code
+## Requirements
 
-## CRITICAL: Load This Skill First
+Use an installed `brepl` binary on `PATH`. Evaluation requires a running nREPL
+server; manual bracket repair does not.
 
-**You MUST load this skill before using brepl.** Do NOT attempt to use brepl without loading this skill first, or you will use incorrect syntax.
+## Command Reference
 
-## Overview
+- `brepl -e EXPR` or `brepl EXPR`: evaluate one expression argument.
+- `brepl` with stdin: evaluate code from a pipe or heredoc.
+- `brepl -f FILE`: load and execute a file.
+- `brepl -m MESSAGE`: send a raw nREPL message in EDN format.
+- `-p PORT`, `-h HOST`: select the nREPL server. `-h` is not help.
+- `--verbose`: show raw protocol messages instead of normal result output.
+- `--help` or `-?`: show help. `--version`: show the installed version.
+- `brepl balance FILE [--dry-run]`: repair brackets, or preview the repair.
 
-brepl is a REPL client for evaluating Clojure expressions. This skill teaches the heredoc pattern for reliable code evaluation.
+## Evaluating Code
 
-**Always load this skill before using brepl. Always use the heredoc pattern for all Clojure code evaluation.**
-
-## The Heredoc Pattern - Default Approach
-
-**Always use heredoc for brepl evaluation.** This eliminates quoting issues, works for all cases, and provides a consistent, reliable pattern.
-
-### Syntax (Stdin - Recommended)
-
-```bash
-brepl <<'EOF'
-(your clojure code here)
-EOF
-```
-
-This is the simplest heredoc syntax - stdin feeds directly to brepl.
-
-### Alternative Syntax (Positional Argument)
-
-For simple one-liners, you can use positional arguments:
-
-```bash
-brepl '(+ 1 2 3)'
-```
-
-Heredoc is preferred for anything with quotes or multiple lines.
-
-**Note**: The `-e` flag is optional - brepl automatically treats stdin and positional arguments as code to evaluate.
-
-**Important**: Use `<<'EOF'` (with quotes) not `<<EOF` to prevent shell variable expansion.
-
-### Examples
-
-**Multi-line expressions**:
+Prefer a quoted heredoc in a Bash-compatible shell. Use `<<'EOF'`, not
+`<<EOF`, to prevent shell expansion. Put the closing `EOF` on its own line.
+Write normal Clojure inside it without extra shell escaping; Clojure string
+escaping still applies. If the shell tool cannot pass multiline input, use a
+positional argument only for simple code that can be quoted safely.
 
 ```bash
 brepl <<'EOF'
@@ -605,146 +585,99 @@ brepl <<'EOF'
 EOF
 ```
 
-**Code with quotes**:
+A Clojure quote such as `'foo` breaks single-quoted shell arguments; use a
+heredoc for code containing `'`. For simple expressions without it, this works:
 
 ```bash
-brepl <<'EOF'
-(println \"String with 'single' and \\\"double\\\" quotes\")
-EOF
+brepl '(+ 1 2 3)'
 ```
 
-**Reloading and testing**:
+`-e` is optional for positional expressions and stdin. Choose one input method:
+`-e EXPR`, positional code, stdin, `-f`, or `-m`. An explicit or positional
+expression causes stdin to be ignored. Do not use bare `-e` with a heredoc;
+it can evaluate `true` instead of the supplied code. Put multiple forms in one
+expression argument or heredoc, not separate positional arguments.
+
+## Selecting the Server
+
+Port priority is `-p`, then `.nrepl-port`, then `BREPL_PORT`, then process discovery.
+Expression and raw-message modes check only the current directory's port file.
+File mode searches upward from the file's directory, stopping at the current
+working directory if it reaches it. Use explicit `-p` when working outside the
+project root or when discovery fails. A stale port file overrides `BREPL_PORT`.
+Select a host with `-h HOST`; the default is `localhost`. Do not rely on
+`BREPL_HOST` in brepl 2.7.1: the CLI default overrides it.
+
+Flags also work with stdin, without `-e`:
 
 ```bash
-brepl <<'EOF'
-(require '[myapp.core] :reload)
-(myapp.core/some-function \"test\" 123)
+brepl -p 7888 <<'EOF'
+(+ 1 2 3)
 EOF
 ```
-
-**Complex data structures**:
-
-```bash
-brepl <<'EOF'
-(def config
-  {:database {:host \"localhost\"
-              :port 5432
-              :name \"mydb\"}
-   :api {:key \"secret-key\"
-         :endpoint \"https://api.example.com\"}})
-(println (:database config))
-EOF
-```
-
-**Running tests**:
-
-```bash
-brepl <<'EOF'
-(require '[clojure.test :refer [run-tests]])
-(require '[myapp.core-test] :reload)
-(run-tests 'myapp.core-test)
-EOF
-```
-
-## Alternative: Simple Expressions
-
-For very simple expressions, you can use direct positional arguments:
-
-```bash
-# Simple expression
-brepl '(inc 1)'
-
-# Same with heredoc (consistent approach)
-brepl <<'EOF'
-(inc 1)
-EOF
-```
-
-**Why prefer heredoc:** No mental overhead deciding which pattern to use, no risk of quoting issues, easy to extend.
 
 ## Loading Files
-
-To load an entire file into the REPL:
 
 ```bash
 brepl -f src/myapp/core.clj
 ```
 
-After loading, you can evaluate functions from that namespace using either pattern.
+`-f` sends a `load-file` expression, not file contents. The file must exist locally
+and be accessible at that path on the server. Relative paths use the server's
+working directory; prefer an absolute path accessible to both.
 
-## Fixing Unbalanced Brackets
+## Raw nREPL Operations
 
-Use `brepl balance` to fix unbalanced brackets in Clojure files using parmezan:
+Use EDN (Clojure data notation) with string keys. Discover supported operations first:
 
 ```bash
-# Fix file in place (default)
-brepl balance src/myapp/core.clj
+brepl -m '{\"op\" \"describe\"}'
+```
 
-# Preview fix to stdout
+Only use operations advertised by that server. For example, if it supports `info`:
+
+```bash
+brepl -m '{\"op\" \"info\" \"symbol\" \"map\" \"ns\" \"clojure.core\"}'
+```
+
+Other useful operations include `lookup`, `complete`, and `ls-sessions`.
+Add `--verbose` to inspect sent and received messages. Read response `status`
+and error fields: raw-message mode can exit `0` even for `eval-error` or `unknown-op`.
+
+## Checking Results
+
+Normal evaluation and file loading return exit `2` for evaluation errors;
+argument or connection failures return `1`. Inspect stderr as well as stdout.
+Neither plain evaluation nor `-f` automatically repairs brackets. An evaluation
+can change server state before failing; do not blindly repeat code with side effects.
+
+## Manual Balance Recovery
+
+Use `brepl balance` only when an error or file inspection shows unbalanced
+delimiters (parentheses, brackets, or braces). Do not run it as a routine step
+after a successful hook or without delimiter evidence. If a hook reports a
+repair, respect that repair; inspect the current file before further changes.
+
+Preview a repair without changing the file:
+
+```bash
 brepl balance src/myapp/core.clj --dry-run
 ```
 
-This is useful for recovering files with bracket errors.
-
-## Common Patterns
-
-### Namespace reloading
-
-```bash
-brepl <<'EOF'
-(require '[myapp.core] :reload-all)
-EOF
-```
-
-### Documentation lookup
-
-```bash
-brepl <<'EOF'
-(require '[clojure.repl :refer [doc source]])
-(doc map)
-(source filter)
-EOF
-```
-
-### Error inspection
-
-```bash
-brepl <<'EOF'
-*e
-(require '[clojure.repl :refer [pst]])
-(pst)
-EOF
-```
-
-## Critical Rules
-
-1. **Always use heredoc** - Use the heredoc pattern for all brepl evaluations
-2. **Quote the delimiter** - Always use `<<'EOF'` not `<<EOF` to prevent shell expansion
-3. **No escaping needed** - Inside heredoc, write Clojure code naturally
-4. **Multi-step operations** - Combine multiple forms in one heredoc block
-5. **Write correct Clojure** - Ensure proper bracket balancing and valid syntax
-
-## Why Always Use Heredoc
-
-**Consistency over optimization.** While simple positional arguments work for basic cases, using heredoc everywhere means:
-
-1. **No decision fatigue** - One pattern for everything
-2. **No quoting errors** - Everything between `<<'EOF'` and `EOF` is literal
-3. **Easy to extend** - Add more lines without changing syntax
-4. **Readable** - Clear where the code starts and ends
-5. **Safe** - No shell interpretation of Clojure code
-
-Shell quoting with Clojure is error-prone: Clojure uses both single and double quotes, nested quotes require escaping, and reader macros can confuse the shell. Heredoc eliminates all these issues.
+Omit `--dry-run` to change the file in place. Review the resulting diff.
+Do not treat silence as proof that hooks are installed or that evaluation
+succeeded; check hook status and evaluation results separately.
 
 ## Resources
 
-brepl documentation: https://github.com/licht1stein/brepl
+https://github.com/licht1stein/brepl (installation instructions if brepl is unavailable).
 ")
 (ns brepl.lib.installer
   "Hook installer for Claude Code integration."
   (:require [babashka.fs :as fs]
             [brepl.lib.skill-content :as skill-content]
             [cheshire.core :as json]
+            [cheshire.factory :as json-factory]
             [clojure.string :as str]))
 
 (defn settings-local-path []
@@ -920,17 +853,34 @@ brepl documentation: https://github.com/licht1stein/brepl
 (defn eca-config-path []
   ".eca/config.json")
 
+(defn eca-env [key] (System/getenv key))
+
+(defn eca-global-config-path []
+  (str (fs/path (or (eca-env "XDG_CONFIG_HOME")
+                    (str (fs/path (System/getProperty "user.home") ".config")))
+                "eca" "config.json")))
+
+(defn config-error [message]
+  (throw (ex-info (str message " No config changed. Review and migrate the project config manually.") {})))
+
 (defn read-eca-config
-  "Read existing .eca/config.json or return empty map."
-  []
-  (let [path (eca-config-path)]
-    (if (fs/exists? path)
-      (try
-        (json/parse-string (slurp path) true)
-        (catch Exception e
-          (println "Warning: Could not parse existing .eca/config.json")
-          {}))
-      {})))
+  "Read JSON with comments, rejecting invalid config. Missing files mean empty config."
+  ([] (read-eca-config (eca-config-path)))
+  ([path]
+   (if (fs/exists? path)
+     (let [values (try
+                    (binding [json-factory/*json-factory*
+                             (json-factory/make-json-factory {:allow-comments true})]
+                      (doall (json/parsed-seq (java.io.StringReader. (slurp path)) true)))
+                    (catch Exception e
+                      (config-error (str "Cannot read " path ": " (.getMessage e)))))
+           config (first values)]
+       (when-not (= 1 (count values))
+         (config-error (str path " must contain exactly one JSON object.")))
+       (when-not (map? config)
+         (config-error (str path " must contain a JSON object.")))
+       config)
+     {})))
 
 (defn write-eca-config
   "Write config to .eca/config.json."
@@ -944,7 +894,7 @@ brepl documentation: https://github.com/licht1stein/brepl
     (spit path (json/generate-string config {:pretty true}))))
 
 (defn brepl-eca-hook-config
-  "Generate brepl hook configuration for ECA."
+  "Return original ECA hook definitions for exact legacy matching."
   []
   {:brepl-validate
    {:type "preToolCall"
@@ -961,54 +911,180 @@ brepl documentation: https://github.com/licht1stein/brepl
     :actions [{:type "shell"
                :shell "brepl eca session-end"}]}})
 
-(defn brepl-eca-hook?
-  "Check if a hook key belongs to brepl."
-  [hook-key]
-  (str/starts-with? (name hook-key) "brepl-"))
+(defn eca-mode-hooks
+  "Hooks to write for a mode. :with-eval and :balance-only install direct
+   hooks. Any other mode (including :uninstall) installs none."
+  [mode]
+  (let [hooks (-> (brepl-eca-hook-config)
+                  (dissoc :brepl-session-end)
+                  (assoc-in [:brepl-validate :visible] false)
+                  (assoc-in [:brepl-eval :visible] false))]
+    (case mode
+      :with-eval hooks
+      :balance-only (assoc-in hooks [:brepl-eval :actions 0 :shell]
+                              "brepl eca eval --balance-only")
+      {})))
 
-(defn install-eca-hooks
-  "Install brepl hooks to .eca/config.json."
-  []
-  (let [config (read-eca-config)
-        existing-hooks (get config :hooks {})
-        new-hooks (brepl-eca-hook-config)
-        ;; Remove existing brepl hooks and add new ones
-        non-brepl-hooks (into {} (remove (fn [[k _]] (brepl-eca-hook? k)) existing-hooks))
-        merged-hooks (merge non-brepl-hooks new-hooks)
-        updated-config (assoc config :hooks merged-hooks)]
-    (write-eca-config updated-config)
-    {:success true
-     :message "ECA hooks installed successfully"
-     :config-path (eca-config-path)}))
+(defn validate-eca-config [config]
+  (when (and (contains? config :hooks) (not (map? (:hooks config))))
+    (config-error "hooks must be an object."))
+  config)
 
-(defn uninstall-eca-hooks
-  "Remove brepl hooks from .eca/config.json."
-  []
-  (let [config (read-eca-config)
-        existing-hooks (get config :hooks {})
-        non-brepl-hooks (into {} (remove (fn [[k _]] (brepl-eca-hook? k)) existing-hooks))
-        updated-config (if (empty? non-brepl-hooks)
-                         (dissoc config :hooks)
-                         (assoc config :hooks non-brepl-hooks))
-        path (eca-config-path)]
-    (if (empty? updated-config)
-      ;; If no other config, remove file
-      (when (fs/exists? path)
-        (fs/delete path))
-      ;; Otherwise just update
-      (write-eca-config updated-config))
-    {:success true :message "ECA hooks uninstalled successfully"}))
+(defn remove-legacy-eca-hooks [config]
+  (reduce-kv
+   (fn [result key definition]
+     (if (contains? (:hooks config) key)
+       (if (or (= definition (get-in config [:hooks key]))
+               (some (fn [mode]
+                       (when-let [hook (get (eca-mode-hooks mode) key)]
+                         (contains? #{hook (dissoc hook :visible)}
+                                    (get-in config [:hooks key]))))
+                     [:with-eval :balance-only]))
+         (update result :hooks dissoc key)
+         (config-error (str "Customized legacy hook " (name key) ". Compare its complete definition before removal.")))
+       result))
+   config (brepl-eca-hook-config)))
 
-(defn check-eca-status
-  "Check ECA hook installation status."
-  []
-  (let [config (read-eca-config)
-        hooks (get config :hooks {})
-        has-brepl-hooks (some brepl-eca-hook? (keys hooks))]
-    {:installed has-brepl-hooks
-     :config-path (eca-config-path)
-     :hooks (when has-brepl-hooks
-              (into {} (filter (fn [[k _]] (brepl-eca-hook? k)) hooks)))}))
+(defn safe-eca-target! [path global-path]
+  (loop [part (fs/absolutize path)]
+    (when part
+      (when (fs/sym-link? part)
+        (config-error "Project config path must not contain symbolic links."))
+      (recur (fs/parent part))))
+  (when (or (= (fs/normalize (fs/absolutize path))
+               (fs/normalize (fs/absolutize global-path)))
+            (and (fs/exists? path) (fs/exists? global-path)
+                 (fs/same-file? path global-path)))
+    (config-error "Project config must not be the global config.")))
+
+(defn eca-project-state []
+  (let [path (eca-config-path)
+        global-path (eca-global-config-path)
+        _ (safe-eca-target! path global-path)
+        config (validate-eca-config (read-eca-config path))
+        cleaned (remove-legacy-eca-hooks config)]
+    {:config config :cleaned cleaned}))
+
+(def eca-skill-tip
+  (str "Tip: this command does not install the brepl skill. In ECA, run "
+       "`/plugin-install brepl` to get it from the official marketplace, or "
+       "copy resources/skills/brepl/SKILL.md from "
+       "https://github.com/licht1stein/brepl into this project's "
+       ".eca/skills/brepl/SKILL.md."))
+
+(def eca-config-help
+  (str "brepl eca install [--balance-only | --with-eval]\n"
+       "brepl eca uninstall\n"
+       "Install without a flag opens a terminal menu with no default. Enter or EOF cancels without writes.\n"
+       "Nonterminal use requires an explicit flag.\n"
+       "Balance-only: validate and fix brackets, never evaluate. With-eval: also evaluate changed files via nREPL.\n"
+       "Generated validate/eval hooks use visible: false: hide the hook block, not hook execution or feedback to the model.\n"
+       "Evaluation executes code and can have side effects, such as file or database changes.\n"
+       "Uninstall takes no flags: it removes exact known direct hooks if present, and nothing else.\n"
+       "Customized known hooks cause failure without writes. No sessionEnd hook is installed or required.\n"
+       "Only project .eca/config.json is changed, at most once; the global config is never read or written.\n"
+       "JSON comments are accepted, but writes remove comments and change formatting.\n"
+       "This command never manages the brepl skill or any ECA plugin; see the tip printed after install.\n"
+       "Restart ECA after changes."))
+
+(def eca-install-modes [:balance-only :with-eval])
+
+(defn eca-mode-arg [args]
+  (let [flags (into {} (map (fn [mode] [(str "--" (name mode)) mode])) eca-install-modes)]
+    (cond
+      (empty? args) nil
+      (and (= 1 (count args)) (contains? flags (first args))) (flags (first args))
+      :else (config-error (str "Invalid flags. Use " (str/join " or " (sort (keys flags))) " or --help.")))))
+
+(defn choose-eca-mode [read-line-fn]
+  (println "1) balance-only Validate and repair brackets, without evaluation.")
+  (println "2) with-eval    Validate, repair brackets, and automatic evaluation.")
+  (println)
+  (println "Warning: automatic evaluation executes code and can have side effects,")
+  (println "including file or database changes.")
+  (println)
+  (print "Choice (no default; Enter or EOF cancels): ")
+  (flush)
+  (let [answer (some-> (read-line-fn) str/trim)]
+    (cond
+      (nil? answer) (config-error "Menu cancelled at end of input.")
+      (= "" answer) (config-error "Menu cancelled.")
+      :else (or (some (fn [[index mode]]
+                        (when (contains? #{(str (inc index)) (name mode)} answer)
+                          mode))
+                      (map-indexed vector eca-install-modes))
+                (config-error "Invalid menu choice.")))))
+
+(defn updated-eca-config [{:keys [cleaned]} mode]
+  (let [hooks (eca-mode-hooks mode)]
+    (cond-> cleaned
+      (seq hooks) (update :hooks merge hooks))))
+
+(def eca-json-warning
+  "Warning: Saving changes removes JSON comments and reformats the file.")
+
+(defn ^:private capitalize-first [s]
+  (if (seq s) (str (str/upper-case (subs s 0 1)) (subs s 1)) s))
+
+(def ^:private eca-mode-fact
+  "Hook summary per mode; excludes :uninstall, which has its own wording."
+  {:balance-only "bracket repair hooks installed; evaluation disabled"
+   :with-eval "bracket repair and evaluation hooks installed"})
+
+(defn ^:private eca-result-message
+  "User-facing result text for a mode, independent of file writes."
+  [mode changed?]
+  (str (case mode
+         :uninstall (if changed?
+                      "Project brepl hooks removed."
+                      "Unchanged: no project brepl hooks found.")
+         (let [fact (eca-mode-fact mode)]
+           (if changed?
+             (str (capitalize-first fact) ". Restart ECA.")
+             (str "Unchanged: " fact "."))))
+       (when (not= mode :uninstall) (str "\n" eca-skill-tip))))
+
+(defn update-eca-project [state mode]
+  (let [config (:config state)
+        updated (updated-eca-config state mode)
+        changed? (not= config updated)]
+    (when changed?
+      (when (and (not (:menu? state)) (fs/exists? (eca-config-path)))
+        (println eca-json-warning)
+        (flush))
+      (write-eca-config updated))
+    {:success true :changed? changed? :config-path (eca-config-path)
+     :config-path-shown? (:menu? state)
+     :message (eca-result-message mode changed?)}))
+
+(defn configure-eca-project
+  "Validate flags and config before selecting a mode and making at most one write.
+   :install supports --balance-only/--with-eval and a terminal menu.
+   :uninstall takes no flags other than --help."
+  ([operation args]
+   (configure-eca-project operation args
+                          {:terminal? (some? (System/console)) :read-line-fn read-line}))
+  ([operation args {:keys [terminal? read-line-fn]}]
+   (if (= ["--help"] (vec args))
+     {:success true :message eca-config-help}
+     (case operation
+       :uninstall
+       (if (seq args)
+         (config-error "brepl eca uninstall takes no flags. Use --help for details.")
+         (update-eca-project (eca-project-state) :uninstall))
+
+       :install
+       (let [mode (eca-mode-arg args)]
+         (when (and (nil? mode) (not terminal?))
+           (config-error "No terminal. Select an explicit mode flag; see brepl eca install --help."))
+         (let [state (assoc (eca-project-state) :menu? (nil? mode))
+               mode (or mode
+                        (do
+                          (println "Config file:" (eca-config-path))
+                          (when (fs/exists? (eca-config-path))
+                            (println eca-json-warning))
+                          (choose-eca-mode read-line-fn)))]
+           (update-eca-project state mode)))))))
 (ns brepl.lib.backup
   "Backup and restore functionality for Claude Code hooks."
   (:require [clojure.java.io :as io])
@@ -2183,7 +2259,7 @@ brepl documentation: https://github.com/licht1stein/brepl
   "Deny the tool call (ECA format)"
   [reason]
   (eca-json-exit {:approval "deny"
-                  :additionalContext reason} 2))
+                  :additionalContext reason} 0))
 
 (defn get-eca-hook-input
   "Parse ECA hook JSON from stdin.
@@ -2284,8 +2360,15 @@ brepl documentation: https://github.com/licht1stein/brepl
 
 (defn handle-eca-eval
   "Handle ECA postToolCall evaluation for Clojure files.
-   Balances brackets after file operations and evaluates via nREPL if available."
-  [_args]
+   Balance-only skips all nREPL discovery and evaluation."
+  [args]
+  (when (= ["--help"] (vec args))
+    (println "brepl eca eval [--balance-only]\nDefault: fix brackets and evaluate via nREPL. --balance-only: fix brackets without port discovery or evaluation.")
+    (System/exit 0))
+  (when-not (or (empty? args) (= ["--balance-only"] (vec args)))
+    (binding [*out* *err*]
+      (println "Invalid flags. Use brepl eca eval [--balance-only] or --help."))
+    (System/exit 1))
   (let [[file-path _tool-input] (get-eca-post-tool-input)]
     ;; No file path or tool errored - silently allow
     (when (nil? file-path)
@@ -2303,10 +2386,11 @@ brepl documentation: https://github.com/licht1stein/brepl
     (let [balance-report (balance-file! file-path)]
 
       ;; Evaluate file via nREPL if available
-      (if-let [port (resolve-port nil file-path)]
+      (if-let [port (when (empty? args) (resolve-port nil file-path))]
         (let [result (eval-file (resolve-host nil) port file-path {:hook true})
               eval-msg (when (:has-error? result)
-                         (str "Evaluation error: " (get-in result [:processed :ex] "Unknown error")))
+                         (str "Evaluation error: "
+                              (:stopReason (format-hook-response (:processed result) true))))
               reason (str/join "\n" (remove nil? [balance-report eval-msg]))]
           (if (seq reason)
             (eca-json-exit {:suppressOutput false
@@ -2335,33 +2419,39 @@ brepl documentation: https://github.com/licht1stein/brepl
     (stop-hooks/cleanup-state session-id)
     (eca-json-exit {:suppressOutput true} 0)))
 
-(defn handle-eca-install [_args]
-  (let [result (installer/install-eca-hooks)]
-    (println "Installing ECA hooks...")
-    (println (:message result))
-    (println)
-    (println "Config file:" (:config-path result))
-    (System/exit 0)))
+(defn handle-eca-config [operation args]
+  (let [exit-code (try
+                    (let [result (installer/configure-eca-project operation args)]
+                      (println (:message result))
+                      (when-not (:config-path-shown? result)
+                        (when-let [path (:config-path result)]
+                          (println "Config file:" path)))
+                      0)
+                    (catch Exception e
+                      (binding [*out* *err*]
+                        (println "Error:" (.getMessage e)))
+                      1))]
+    (System/exit exit-code)))
 
-(defn handle-eca-uninstall [_args]
-  (let [result (installer/uninstall-eca-hooks)]
-    (println "Removing ECA hooks...")
-    (println (:message result))
-    (System/exit 0)))
+(defn handle-eca-install [args]
+  (handle-eca-config :install args))
+
+(defn handle-eca-uninstall [args]
+  (handle-eca-config :uninstall args))
 
 (defn show-eca-help [subcommand]
   (println "brepl eca - ECA (Editor Code Assistant) hook integration")
   (println)
-  (println "USAGE:")
-  (println "    brepl eca install")
-  (println "    brepl eca uninstall")
+  (println installer/eca-config-help)
+  (println)
+  (println "COMPATIBLE HOOK COMMANDS:")
   (println "    brepl eca validate")
-  (println "    brepl eca eval")
+  (println "    brepl eca eval [--balance-only]")
   (println "    brepl eca session-end")
   (println)
   (println "SUBCOMMANDS:")
-  (println "    install        Install brepl hooks to .eca/config.json")
-  (println "    uninstall      Remove brepl hooks from .eca/config.json")
+  (println "    install        Configure project brepl hooks")
+  (println "    uninstall      Remove project brepl hooks")
   (println "    validate       Validate Clojure file syntax before write/edit (preToolCall hook)")
   (println "    eval           Evaluate Clojure file after write/edit (postToolCall hook)")
   (println "    session-end    Clean up session backup files (sessionEnd hook)")

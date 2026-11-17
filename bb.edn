@@ -1,4 +1,5 @@
-{:paths ["src"]
+{:min-bb-version "1.12.213"
+ :paths ["src"]
  :deps {io.github.borkdude/parmezan {:git/sha "a10b6c9019e7b01fe31045929505fe7bd5f2b468"}}
  :bbin/bin {brepl {:main-opts ["-f" "brepl"]}}
  :tasks

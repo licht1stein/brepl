@@ -636,7 +636,7 @@ Perfect for developers who want reliable AI assistance without managing multiple
 
 ## Requirements
 
-- [Babashka](https://babashka.org/) installed
+- [Babashka](https://babashka.org/) 1.12.213 or newer
 - Running nREPL server (Babashka, Clojure, etc.)
 
 ## Development

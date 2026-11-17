@@ -4,52 +4,32 @@
 (def skill-md
   "---
 name: brepl
-description: \"MANDATORY - Load this skill BEFORE using brepl in any way. Teaches the heredoc pattern for reliable code evaluation.\"
+description: \"Evaluate Clojure code and use the REPL via brepl. Load this skill before using brepl.\"
 ---
 
-# brepl - Evaluating Clojure Code
+## Requirements
 
-## CRITICAL: Load This Skill First
+Use an installed `brepl` binary on `PATH`. Evaluation requires a running nREPL
+server; manual bracket repair does not.
 
-**You MUST load this skill before using brepl.** Do NOT attempt to use brepl without loading this skill first, or you will use incorrect syntax.
+## Command Reference
 
-## Overview
+- `brepl -e EXPR` or `brepl EXPR`: evaluate one expression argument.
+- `brepl` with stdin: evaluate code from a pipe or heredoc.
+- `brepl -f FILE`: load and execute a file.
+- `brepl -m MESSAGE`: send a raw nREPL message in EDN format.
+- `-p PORT`, `-h HOST`: select the nREPL server. `-h` is not help.
+- `--verbose`: show raw protocol messages instead of normal result output.
+- `--help` or `-?`: show help. `--version`: show the installed version.
+- `brepl balance FILE [--dry-run]`: repair brackets, or preview the repair.
 
-brepl is a REPL client for evaluating Clojure expressions. This skill teaches the heredoc pattern for reliable code evaluation.
+## Evaluating Code
 
-**Always load this skill before using brepl. Always use the heredoc pattern for all Clojure code evaluation.**
-
-## The Heredoc Pattern - Default Approach
-
-**Always use heredoc for brepl evaluation.** This eliminates quoting issues, works for all cases, and provides a consistent, reliable pattern.
-
-### Syntax (Stdin - Recommended)
-
-```bash
-brepl <<'EOF'
-(your clojure code here)
-EOF
-```
-
-This is the simplest heredoc syntax - stdin feeds directly to brepl.
-
-### Alternative Syntax (Positional Argument)
-
-For simple one-liners, you can use positional arguments:
-
-```bash
-brepl '(+ 1 2 3)'
-```
-
-Heredoc is preferred for anything with quotes or multiple lines.
-
-**Note**: The `-e` flag is optional - brepl automatically treats stdin and positional arguments as code to evaluate.
-
-**Important**: Use `<<'EOF'` (with quotes) not `<<EOF` to prevent shell variable expansion.
-
-### Examples
-
-**Multi-line expressions**:
+Prefer a quoted heredoc in a Bash-compatible shell. Use `<<'EOF'`, not
+`<<EOF`, to prevent shell expansion. Put the closing `EOF` on its own line.
+Write normal Clojure inside it without extra shell escaping; Clojure string
+escaping still applies. If the shell tool cannot pass multiline input, use a
+positional argument only for simple code that can be quoted safely.
 
 ```bash
 brepl <<'EOF'
@@ -58,138 +38,90 @@ brepl <<'EOF'
 EOF
 ```
 
-**Code with quotes**:
+A Clojure quote such as `'foo` breaks single-quoted shell arguments; use a
+heredoc for code containing `'`. For simple expressions without it, this works:
 
 ```bash
-brepl <<'EOF'
-(println \"String with 'single' and \\\"double\\\" quotes\")
-EOF
+brepl '(+ 1 2 3)'
 ```
 
-**Reloading and testing**:
+`-e` is optional for positional expressions and stdin. Choose one input method:
+`-e EXPR`, positional code, stdin, `-f`, or `-m`. An explicit or positional
+expression causes stdin to be ignored. Do not use bare `-e` with a heredoc;
+it can evaluate `true` instead of the supplied code. Put multiple forms in one
+expression argument or heredoc, not separate positional arguments.
+
+## Selecting the Server
+
+Port priority is `-p`, then `.nrepl-port`, then `BREPL_PORT`, then process discovery.
+Expression and raw-message modes check only the current directory's port file.
+File mode searches upward from the file's directory, stopping at the current
+working directory if it reaches it. Use explicit `-p` when working outside the
+project root or when discovery fails. A stale port file overrides `BREPL_PORT`.
+Select a host with `-h HOST`; the default is `localhost`. Do not rely on
+`BREPL_HOST` in brepl 2.7.1: the CLI default overrides it.
+
+Flags also work with stdin, without `-e`:
 
 ```bash
-brepl <<'EOF'
-(require '[myapp.core] :reload)
-(myapp.core/some-function \"test\" 123)
+brepl -p 7888 <<'EOF'
+(+ 1 2 3)
 EOF
 ```
-
-**Complex data structures**:
-
-```bash
-brepl <<'EOF'
-(def config
-  {:database {:host \"localhost\"
-              :port 5432
-              :name \"mydb\"}
-   :api {:key \"secret-key\"
-         :endpoint \"https://api.example.com\"}})
-(println (:database config))
-EOF
-```
-
-**Running tests**:
-
-```bash
-brepl <<'EOF'
-(require '[clojure.test :refer [run-tests]])
-(require '[myapp.core-test] :reload)
-(run-tests 'myapp.core-test)
-EOF
-```
-
-## Alternative: Simple Expressions
-
-For very simple expressions, you can use direct positional arguments:
-
-```bash
-# Simple expression
-brepl '(inc 1)'
-
-# Same with heredoc (consistent approach)
-brepl <<'EOF'
-(inc 1)
-EOF
-```
-
-**Why prefer heredoc:** No mental overhead deciding which pattern to use, no risk of quoting issues, easy to extend.
 
 ## Loading Files
-
-To load an entire file into the REPL:
 
 ```bash
 brepl -f src/myapp/core.clj
 ```
 
-After loading, you can evaluate functions from that namespace using either pattern.
+`-f` sends a `load-file` expression, not file contents. The file must exist locally
+and be accessible at that path on the server. Relative paths use the server's
+working directory; prefer an absolute path accessible to both.
 
-## Fixing Unbalanced Brackets
+## Raw nREPL Operations
 
-Use `brepl balance` to fix unbalanced brackets in Clojure files using parmezan:
+Use EDN (Clojure data notation) with string keys. Discover supported operations first:
 
 ```bash
-# Fix file in place (default)
-brepl balance src/myapp/core.clj
+brepl -m '{\"op\" \"describe\"}'
+```
 
-# Preview fix to stdout
+Only use operations advertised by that server. For example, if it supports `info`:
+
+```bash
+brepl -m '{\"op\" \"info\" \"symbol\" \"map\" \"ns\" \"clojure.core\"}'
+```
+
+Other useful operations include `lookup`, `complete`, and `ls-sessions`.
+Add `--verbose` to inspect sent and received messages. Read response `status`
+and error fields: raw-message mode can exit `0` even for `eval-error` or `unknown-op`.
+
+## Checking Results
+
+Normal evaluation and file loading return exit `2` for evaluation errors;
+argument or connection failures return `1`. Inspect stderr as well as stdout.
+Neither plain evaluation nor `-f` automatically repairs brackets. An evaluation
+can change server state before failing; do not blindly repeat code with side effects.
+
+## Manual Balance Recovery
+
+Use `brepl balance` only when an error or file inspection shows unbalanced
+delimiters (parentheses, brackets, or braces). Do not run it as a routine step
+after a successful hook or without delimiter evidence. If a hook reports a
+repair, respect that repair; inspect the current file before further changes.
+
+Preview a repair without changing the file:
+
+```bash
 brepl balance src/myapp/core.clj --dry-run
 ```
 
-This is useful for recovering files with bracket errors.
-
-## Common Patterns
-
-### Namespace reloading
-
-```bash
-brepl <<'EOF'
-(require '[myapp.core] :reload-all)
-EOF
-```
-
-### Documentation lookup
-
-```bash
-brepl <<'EOF'
-(require '[clojure.repl :refer [doc source]])
-(doc map)
-(source filter)
-EOF
-```
-
-### Error inspection
-
-```bash
-brepl <<'EOF'
-*e
-(require '[clojure.repl :refer [pst]])
-(pst)
-EOF
-```
-
-## Critical Rules
-
-1. **Always use heredoc** - Use the heredoc pattern for all brepl evaluations
-2. **Quote the delimiter** - Always use `<<'EOF'` not `<<EOF` to prevent shell expansion
-3. **No escaping needed** - Inside heredoc, write Clojure code naturally
-4. **Multi-step operations** - Combine multiple forms in one heredoc block
-5. **Write correct Clojure** - Ensure proper bracket balancing and valid syntax
-
-## Why Always Use Heredoc
-
-**Consistency over optimization.** While simple positional arguments work for basic cases, using heredoc everywhere means:
-
-1. **No decision fatigue** - One pattern for everything
-2. **No quoting errors** - Everything between `<<'EOF'` and `EOF` is literal
-3. **Easy to extend** - Add more lines without changing syntax
-4. **Readable** - Clear where the code starts and ends
-5. **Safe** - No shell interpretation of Clojure code
-
-Shell quoting with Clojure is error-prone: Clojure uses both single and double quotes, nested quotes require escaping, and reader macros can confuse the shell. Heredoc eliminates all these issues.
+Omit `--dry-run` to change the file in place. Review the resulting diff.
+Do not treat silence as proof that hooks are installed or that evaluation
+succeeded; check hook status and evaluation results separately.
 
 ## Resources
 
-brepl documentation: https://github.com/licht1stein/brepl
+https://github.com/licht1stein/brepl (installation instructions if brepl is unavailable).
 ")

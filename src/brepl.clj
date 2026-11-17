@@ -969,7 +969,7 @@
   "Deny the tool call (ECA format)"
   [reason]
   (eca-json-exit {:approval "deny"
-                  :additionalContext reason} 2))
+                  :additionalContext reason} 0))
 
 (defn get-eca-hook-input
   "Parse ECA hook JSON from stdin.
@@ -1070,8 +1070,15 @@
 
 (defn handle-eca-eval
   "Handle ECA postToolCall evaluation for Clojure files.
-   Balances brackets after file operations and evaluates via nREPL if available."
-  [_args]
+   Balance-only skips all nREPL discovery and evaluation."
+  [args]
+  (when (= ["--help"] (vec args))
+    (println "brepl eca eval [--balance-only]\nDefault: fix brackets and evaluate via nREPL. --balance-only: fix brackets without port discovery or evaluation.")
+    (System/exit 0))
+  (when-not (or (empty? args) (= ["--balance-only"] (vec args)))
+    (binding [*out* *err*]
+      (println "Invalid flags. Use brepl eca eval [--balance-only] or --help."))
+    (System/exit 1))
   (let [[file-path _tool-input] (get-eca-post-tool-input)]
     ;; No file path or tool errored - silently allow
     (when (nil? file-path)
@@ -1089,10 +1096,11 @@
     (let [balance-report (balance-file! file-path)]
 
       ;; Evaluate file via nREPL if available
-      (if-let [port (resolve-port nil file-path)]
+      (if-let [port (when (empty? args) (resolve-port nil file-path))]
         (let [result (eval-file (resolve-host nil) port file-path {:hook true})
               eval-msg (when (:has-error? result)
-                         (str "Evaluation error: " (get-in result [:processed :ex] "Unknown error")))
+                         (str "Evaluation error: "
+                              (:stopReason (format-hook-response (:processed result) true))))
               reason (str/join "\n" (remove nil? [balance-report eval-msg]))]
           (if (seq reason)
             (eca-json-exit {:suppressOutput false
@@ -1121,33 +1129,39 @@
     (stop-hooks/cleanup-state session-id)
     (eca-json-exit {:suppressOutput true} 0)))
 
-(defn handle-eca-install [_args]
-  (let [result (installer/install-eca-hooks)]
-    (println "Installing ECA hooks...")
-    (println (:message result))
-    (println)
-    (println "Config file:" (:config-path result))
-    (System/exit 0)))
+(defn handle-eca-config [operation args]
+  (let [exit-code (try
+                    (let [result (installer/configure-eca-project operation args)]
+                      (println (:message result))
+                      (when-not (:config-path-shown? result)
+                        (when-let [path (:config-path result)]
+                          (println "Config file:" path)))
+                      0)
+                    (catch Exception e
+                      (binding [*out* *err*]
+                        (println "Error:" (.getMessage e)))
+                      1))]
+    (System/exit exit-code)))
 
-(defn handle-eca-uninstall [_args]
-  (let [result (installer/uninstall-eca-hooks)]
-    (println "Removing ECA hooks...")
-    (println (:message result))
-    (System/exit 0)))
+(defn handle-eca-install [args]
+  (handle-eca-config :install args))
+
+(defn handle-eca-uninstall [args]
+  (handle-eca-config :uninstall args))
 
 (defn show-eca-help [subcommand]
   (println "brepl eca - ECA (Editor Code Assistant) hook integration")
   (println)
-  (println "USAGE:")
-  (println "    brepl eca install")
-  (println "    brepl eca uninstall")
+  (println installer/eca-config-help)
+  (println)
+  (println "COMPATIBLE HOOK COMMANDS:")
   (println "    brepl eca validate")
-  (println "    brepl eca eval")
+  (println "    brepl eca eval [--balance-only]")
   (println "    brepl eca session-end")
   (println)
   (println "SUBCOMMANDS:")
-  (println "    install        Install brepl hooks to .eca/config.json")
-  (println "    uninstall      Remove brepl hooks from .eca/config.json")
+  (println "    install        Configure project brepl hooks")
+  (println "    uninstall      Remove project brepl hooks")
   (println "    validate       Validate Clojure file syntax before write/edit (preToolCall hook)")
   (println "    eval           Evaluate Clojure file after write/edit (postToolCall hook)")
   (println "    session-end    Clean up session backup files (sessionEnd hook)")

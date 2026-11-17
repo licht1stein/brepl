@@ -52,17 +52,35 @@ Now Claude can write Clojure code confidently without worrying about parentheses
 
 ### For ECA (Editor Code Assistant)
 
-brepl fully supports [ECA](https://eca.dev) ([GitHub](https://github.com/editor-code-assistant/eca)), an open source editor-agnostic AI pair programming tool:
+Use `brepl eca install` in your project to write automatic hooks into `.eca/config.json`. This command never manages the brepl skill or any ECA plugin; see the skill note below.
+
+`brepl eca install` offers a terminal menu with two modes, no default:
+
+- **Balance-only:** direct `brepl-validate` and `brepl-eval` hooks validate edits and repair brackets. The post hook runs `brepl eca eval --balance-only`. It never discovers a port, resolves a host, or evaluates code, even with a running REPL.
+- **With-eval:** direct `brepl-validate` and `brepl-eval` hooks use the original commands, `brepl eca validate` and `brepl eca eval`. They validate edits, repair brackets, and evaluate changed Clojure files if nREPL is available. **Automatic evaluation executes code and can have side effects, including file or database changes.**
+
+Generated validate/eval hooks set hook-level `visible: false`. This hides their hook blocks in ECA, not hook execution, validation, bracket repair, or feedback to the model.
+
+The menu has no default. Select a number or mode name. Blank Enter or EOF (end of input) cancels without writing config. Without a terminal, select a mode explicitly:
 
 ```bash
-# Start your nREPL server
-bb nrepl-server
-
-# Install ECA hooks in your project
-brepl eca install
+brepl eca install --balance-only
+brepl eca install --with-eval
+brepl eca uninstall
+brepl eca install --help
+brepl eca uninstall --help
+brepl eca eval --help
 ```
 
-The `brepl eca install` command configures ECA via `.eca/config.json` with the same capabilities as Claude Code hooks—bracket validation, auto-fix, and REPL evaluation.
+Missing mode flags outside a terminal fail without reading stdin or changing config. `brepl eca uninstall` takes no flags: it removes exact known direct hooks if present and changes nothing else. `eca eval` without flags keeps full evaluation. `eca eval --balance-only` keeps the same hook JSON contract: bracket repair reports use `additionalContext`, and no change is silently allowed.
+
+**Removal and safety:** known keys are `brepl-validate`, `brepl-eval`, and the old `brepl-session-end`. A complete definition must match an original generated hook, an earlier balance-only hook without `visible`, or a new hidden validate/eval hook. A customized known key aborts the whole operation without writes; review such definitions manually. No new `sessionEnd` hook is registered, since these hooks do not need session state; `eca session-end` remains safe for existing callers. Only the project file is written, at most once; an unchanged result causes no write. Global config, Claude settings, and temporary state are never read or changed.
+
+JSON line comments (`//`) and block comments (`/* ... */`) are accepted on read. Writes preserve unrelated values but remove comments and change formatting.
+
+**The brepl skill:** `brepl eca install`/`uninstall` never install, copy, or remove the brepl skill. Get it in ECA with `/plugin-install brepl` (it is already published in the official marketplace), or copy `resources/skills/brepl/SKILL.md` from this repository into your project's `.eca/skills/brepl/SKILL.md`.
+
+**Restart ECA** after config changes. For full automatic evaluation, start your project's nREPL server, for example with `bb nrepl-server`.
 
 ### For Command-Line Usage
 

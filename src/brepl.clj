@@ -1,4 +1,4 @@
-#!/usr/bin/env bb
+ #!/usr/bin/env -S bb --config /dev/null
 (ns brepl
   (:require [babashka.cli :as cli]
             [clojure.java.io :as io]
